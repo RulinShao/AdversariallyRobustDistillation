@@ -27,11 +27,12 @@ parser.add_argument('--save_period', default=1, type=int, help='save every __ ep
 parser.add_argument('--alpha', default=1.0, type=float, help='weight for sum of losses')
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 parser.add_argument('--distill_method', default='kdiga_ard', choices=['ard','kd','kdiga','kdiga_rs','kdiga_ard'])
+parser.add_argument('--exp_note', default='small_gama-')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-exp_id = f"runs/{args.distill_method}-{args.teacher_model}-{args.model}-{args.dataset}"
+exp_id = f"runs/{args.distill_method}-{args.exp_note}{args.teacher_model}-{args.model}-{args.dataset}"
 i = 1
 while os.path.isdir(exp_id):
     exp_id = exp_id + str(i)
@@ -209,7 +210,7 @@ def train(epoch, optimizer):
             inputs.grad = None
             inputs.requires_grad_(False)
 
-            gama = 1000 / inputs.shape[0]
+            gama = 1000 / (inputs.shape[0]*inputs.shape[1].inputs.shape[2])
             loss = args.alpha * args.temp * args.temp * KL_loss(F.log_softmax(outputs / args.temp, dim=1),
                                                                 F.softmax(teacher_outputs / args.temp, dim=1)) + (
                            1.0 - args.alpha) * hard_loss + gama * (s_grad - t_grad).norm(2)
