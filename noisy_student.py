@@ -25,9 +25,11 @@ parser.add_argument('--save_period', default=1, type=int, help='save every __ ep
 parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of losses')
 parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
-parser.add_argument('--noisy_student_loop', default=3)
-parser.add_argument('--output', default = '1022', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', dnefault='noisy_student_alpha0.5_gamma1')
+parser.add_argument('--noisy_student_loop', default=5)
+parser.add_argument('--self_distill_only', default=True, help='train with cross-entropy loss only in the first loop')
+parser.add_argument('--student_no_init', default=True, help='keep the student as the initialization of the next loop')
+parser.add_argument('--output', default='1023', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='self_distill__no_init__alpha0.5_gamma1')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
@@ -138,11 +140,13 @@ def build_mode(loop=0, exp_id=None):
         teacher_net = build_teacher_model(args.model)
         _, best_robust_path = best_paths(exp_id=exp_id)
         teacher_net.load_state_dict(torch.load(best_robust_path)['net'])
+        if args.student_no_init:
+            basic_net.load_state_dict(torch.load(best_robust_path)['net'])
     teacher_net.eval()
     return basic_net, net, teacher_net
 
 
-def train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, optimizer, exp_id=''):
+def train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer, exp_id=''):
     train_loss = 0
     iterator = tqdm(trainloader, ncols=0, leave=False)
     basic_net.train()
@@ -173,11 +177,33 @@ def train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, optimizer, exp
         iterator.set_description(str(loss.item()))
 
     if (epoch+1)%args.save_period == 0:
-        save_model(basic_net, optimizer, exp_id, '/epoch='+str(epoch)+'.t7')
+        save_model(basic_net, optimizer, exp_id, f"/loop_{loop}_epoch_{epoch}.t7")
 
     print('Mean Training Loss:', train_loss/len(iterator))
     return train_loss
 
+
+def train_CE(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer, exp_id=''):
+    train_loss = 0
+    iterator = tqdm(trainloader, ncols=0, leave=False)
+    basic_net.train()
+    for batch_idx, (inputs, targets) in enumerate(iterator):
+        inputs, targets = inputs.to(device), targets.to(device)
+        optimizer.zero_grad()
+
+        basic_outputs = basic_net(inputs)
+        loss = XENT_loss(basic_outputs, targets)
+
+        loss.backward()
+        optimizer.step()
+        train_loss += loss.item()
+        iterator.set_description(str(loss.item()))
+
+    if (epoch + 1) % args.save_period == 0:
+        save_model(basic_net, optimizer, exp_id, f"/loop_{loop}_epoch_{epoch}.t7")
+
+    print('Mean Training Loss:', train_loss / len(iterator))
+    return train_loss
 
 def test(basic_net, net):
     net.eval()
@@ -230,13 +256,13 @@ def evaluate(test_student_path):
 
 def main():
     for loop in range(args.noisy_student_loop):
-        prefix = f"{args.output}/NoisyStudent_loop{loop}_{args.exp_note}"
+        prefix = f"{args.output}/NoisyStudent__{args.exp_note}_loop{loop}"
         i = 1
         exp_id = prefix + f"({i})"
         while os.path.isdir(prefix + f"({i})"):
             i += 1
             exp_id = prefix + f"({i})"
-        writer = SummaryWriter(log_dir="runs/"+exp_id+f"loop{loop}")
+        writer = SummaryWriter(log_dir="runs/"+exp_id)
 
         basic_net, net, teacher_net = build_mode(loop=loop)
 
@@ -249,7 +275,10 @@ def main():
         best_robust_val = .0
         for epoch in range(args.epochs):
             adjust_learning_rate(optimizer, epoch, lr)
-            train_loss = train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, optimizer,exp_id=exp_id)
+            if args.self_distill_only and loop == 0:
+                train_loss = train_CE(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
+            else:
+                train_loss = train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
             writer.add_scalar('train/loss', train_loss, epoch)
             if (epoch+1)%args.val_period == 0:
                 natural_val, robust_val = test(basic_net, net)
