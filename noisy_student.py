@@ -13,9 +13,9 @@ from models import *
 
 parser = argparse.ArgumentParser(description='Noisy Student CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
-parser.add_argument('--lr_schedule', type=int, nargs='+', default=[50, 100], help='Decrease learning rate at these epochs.')
-parser.add_argument('--lr_factor', default=0.1, type=float, help='factor by which to decrease lr')
-parser.add_argument('--epochs', default=150, type=int, help='number of epochs for training')
+parser.add_argument('--lr_schedule', type=int, nargs='+', default=[15, 30, 45, 60, 75, 90], help='Decrease learning rate at these epochs.')
+parser.add_argument('--lr_factor', default=0.5, type=float, help='factor by which to decrease lr')
+parser.add_argument('--epochs', default=100, type=int, help='number of epochs for training')
 parser.add_argument('--model', default = 'MobileNetV2', type = str, help = 'student model name')
 parser.add_argument('--teacher_model', default = 'WideResNet', type = str, help = 'initial teacher network model')
 parser.add_argument('--teacher_path', default = '../checkpoint/trades/model_cifar_wrn.pt', type=str, help='path of teacher net being distilled')
@@ -29,7 +29,7 @@ parser.add_argument('--noisy_student_loop', default=5)
 parser.add_argument('--self_distill_only', default=True, help='train with cross-entropy loss only in the first loop')
 parser.add_argument('--student_no_init', default=True, help='keep the student as the initialization of the next loop')
 parser.add_argument('--output', default='1023', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='self_distill__no_init__alpha0.5_gamma1')
+parser.add_argument('--exp_note', default='self_distill__no_init__alpha0.5_gamma1_set3')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
@@ -128,7 +128,7 @@ def build_teacher_model(model_name=args.teacher_model):
     return teacher_net
 
 
-def build_mode(loop=0, exp_id=None):
+def build_model(loop=0, exp_id=None):
     basic_net = build_student_model()
     net = AttackPGD(basic_net, config)
     print(f"==> Loading teacher from {args.teacher_path}")
@@ -246,7 +246,7 @@ def best_paths(exp_id):
 
 
 def evaluate(test_student_path):
-    basic_net, net, teacher_net = build_mode()
+    basic_net, net, teacher_net = build_model()
     basic_net.load_state_dict(torch.load(test_student_path)['net'])
     basic_net.eval()
     natural_val, robust_val = test()
@@ -254,17 +254,21 @@ def evaluate(test_student_path):
     print(f"natural acc = {natural_val:.4f}, robust acc = {robust_val:.4f}")
 
 
-def main():
-    for loop in range(args.noisy_student_loop):
-        prefix = f"{args.output}/NoisyStudent__{args.exp_note}_loop{loop}"
-        i = 1
+def create_exp_id():
+    prefix = f"{args.output}/NoisyStudent__{args.exp_note}"
+    i = 1
+    exp_id = prefix + f"({i})"
+    while os.path.isdir(prefix + f"({i})"):
+        i += 1
         exp_id = prefix + f"({i})"
-        while os.path.isdir(prefix + f"({i})"):
-            i += 1
-            exp_id = prefix + f"({i})"
-        writer = SummaryWriter(log_dir="runs/"+exp_id)
+    return exp_id
 
-        basic_net, net, teacher_net = build_mode(loop=loop)
+def main():
+    exp_id = create_exp_id()
+    for loop in range(args.noisy_student_loop):
+        basic_net, net, teacher_net = build_model(loop=loop, exp_id=exp_id)
+
+        writer = SummaryWriter(log_dir="runs/"+exp_id+f"_loop{loop}")
 
         lr = args.lr
         optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=2e-4)
