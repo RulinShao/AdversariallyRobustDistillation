@@ -13,9 +13,9 @@ from models import *
 
 parser = argparse.ArgumentParser(description='Noisy Student CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
-parser.add_argument('--lr_schedule', type=int, nargs='+', default=[15, 30, 45, 60, 75, 90], help='Decrease learning rate at these epochs.')
-parser.add_argument('--lr_factor', default=0.5, type=float, help='factor by which to decrease lr')
-parser.add_argument('--epochs', default=100, type=int, help='number of epochs for training')
+parser.add_argument('--lr_schedule', type=int, nargs='+', default=[50, 100], help='Decrease learning rate at these epochs.')
+parser.add_argument('--lr_factor', default=0.1, type=float, help='factor by which to decrease lr')
+parser.add_argument('--epochs', default=150, type=int, help='number of epochs for training')
 parser.add_argument('--model', default = 'MobileNetV2', type = str, help = 'student model name')
 parser.add_argument('--teacher_model', default = 'WideResNet', type = str, help = 'initial teacher network model')
 parser.add_argument('--teacher_path', default = '../checkpoint/trades/model_cifar_wrn.pt', type=str, help='path of teacher net being distilled')
@@ -26,10 +26,11 @@ parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of 
 parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 parser.add_argument('--noisy_student_loop', default=5)
-parser.add_argument('--self_distill_only', default=True, help='train with cross-entropy loss only in the first loop')
-parser.add_argument('--student_no_init', default=True, help='keep the student as the initialization of the next loop')
-parser.add_argument('--output', default='1023', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='self_distill__no_init__alpha0.5_gamma1_set3')
+parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
+parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt')
+parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
+parser.add_argument('--output', default='1025', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='init_as_the_best__alpha0.5_gamma1_set0')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
@@ -140,7 +141,7 @@ def build_model(loop=0, exp_id=None):
         teacher_net = build_teacher_model(args.model)
         _, best_robust_path = best_paths(exp_id=exp_id)
         teacher_net.load_state_dict(torch.load(best_robust_path)['net'])
-        if args.student_no_init:
+        if args.student_init_as_best:
             basic_net.load_state_dict(torch.load(best_robust_path)['net'])
     teacher_net.eval()
     return basic_net, net, teacher_net
@@ -271,6 +272,8 @@ def main():
         writer = SummaryWriter(log_dir="runs/"+exp_id+f"_loop{loop}")
 
         lr = args.lr
+        if args.student_init_as_best and loop > 0:
+            lr = lr * args.lr_decay_
         optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=2e-4)
         KL_loss = nn.KLDivLoss()
         XENT_loss = nn.CrossEntropyLoss()
@@ -279,7 +282,7 @@ def main():
         best_robust_val = .0
         for epoch in range(args.epochs):
             adjust_learning_rate(optimizer, epoch, lr)
-            if args.self_distill_only and loop == 0:
+            if args.no_robust_teacher and loop == 0:
                 train_loss = train_CE(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
             else:
                 train_loss = train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
