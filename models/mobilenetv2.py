@@ -39,7 +39,7 @@ class MobileNetV2(nn.Module):
            (6, 160, 3, 2),
            (6, 320, 1, 1)]
 
-    def __init__(self, num_classes=10):
+    def __init__(self, num_classes=10, droprate=0.0):
         super(MobileNetV2, self).__init__()
         self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(32)
@@ -47,6 +47,7 @@ class MobileNetV2(nn.Module):
         self.conv2 = nn.Conv2d(320, 1280, kernel_size=1, stride=1, padding=0, bias=False)
         self.bn2 = nn.BatchNorm2d(1280)
         self.linear = nn.Linear(1280, num_classes)
+        self.droprate = droprate
 
     def _make_layers(self, in_planes):
         layers = []
@@ -63,5 +64,7 @@ class MobileNetV2(nn.Module):
         out = F.relu(self.bn2(self.conv2(out)))
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
+        if self.droprate > 0:
+            out = F.dropout(out, p=self.droprate, training=self.training)
         out = self.linear(out)
         return out

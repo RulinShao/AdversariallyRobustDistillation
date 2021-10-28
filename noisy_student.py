@@ -26,11 +26,14 @@ parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of 
 parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 parser.add_argument('--noisy_student_loop', default=5)
-parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
-parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt')
+parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
+parser.add_argument('--student_init_as_best', default=False, help='initialize the student as the best ckpt')
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
-parser.add_argument('--output', default='1025', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='init_as_the_best__alpha0.5_gamma1_set0')
+parser.add_argument('--droprate', default=0.5, help='dropout rate for the dropout added to the last layer')
+parser.add_argument('--resume', default='', help='exp_id to load student ckpt to serve as the teacher')
+# parser.add_argument('--resume', default='1025/NoisyStudent__init_as_the_best__alpha0.5_gamma1_set0(1)', help='exp_id to load student ckpt to serve as the teacher')
+parser.add_argument('--output', default='1028', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='no_robust_teacher__drop0.5__alpha0.5_gamma1_set0')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
@@ -103,7 +106,7 @@ class AttackPGD(nn.Module):
 def build_student_model(model_name=args.model):
     print('==> Building model..'+args.model)
     if model_name == 'MobileNetV2':
-        basic_net = MobileNetV2(num_classes=num_classes)
+        basic_net = MobileNetV2(num_classes=num_classes, droprate=args.droprate)
     elif model_name == 'WideResNet':
         basic_net = WideResNet(num_classes=num_classes)
     elif model_name == 'ResNet18':
@@ -130,21 +133,48 @@ def build_teacher_model(model_name=args.teacher_model):
 
 
 def build_model(loop=0, exp_id=None):
+    """
+    There are three situations:
+        1. args.resume passes an exp_id for loading ckpt. Then the teacher model will load from
+        the corresponding best robust model and optimizer as the teacher model, with a lr with args.lr_decay_
+        2. If not resume and loop=0, initialize the teacher (robust if args.no_robust_teacher is not True,
+         , student from scratch, and lr without decay
+        3. If not resume and loop>0, initialize the teacher as the best student in this exp, initialize the student
+        (from scratch with args.lr if args.student_init_as_best is False,
+        load the best ckpt with args.lr * args.lr_decay_ if True).
+    :param loop: loop index in noisy student training
+    :param exp_id: exp_id for loading the saved best robust ckpt
+    :return:
+    basic_net: student model,
+    net: student model wrapped with adv attack,
+    teacher_net: the teacher mdoel,
+    lr:learning rate,
+    optimizer: optimizer
+    """
     basic_net = build_student_model()
     net = AttackPGD(basic_net, config)
-    print(f"==> Loading teacher from {args.teacher_path}")
-    if loop == 0:
-        teacher_net = build_teacher_model()
-        teacher_net.load_state_dict(torch.load(args.teacher_path))
-    else:
-        assert exp_id is not None
+    lr = args.lr
+    if args.resume or (args.student_init_as_best and loop > 0):
+        lr = lr * args.lr_decay_
+    optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=2e-4)
+
+    if args.resume or loop > 1:
         teacher_net = build_teacher_model(args.model)
-        _, best_robust_path = best_paths(exp_id=exp_id)
+        if args.resume:
+            _, best_robust_path = best_paths(exp_id=args.resume)
+            # optimizer.load_state_dict(torch.load(best_robust_path)['optimizer'])
+        else:
+            assert exp_id is not None
+            _, best_robust_path = best_paths(exp_id=exp_id)
         teacher_net.load_state_dict(torch.load(best_robust_path)['net'])
         if args.student_init_as_best:
             basic_net.load_state_dict(torch.load(best_robust_path)['net'])
+    else:
+        print(f"==> Loading teacher from {args.teacher_path}")
+        teacher_net = build_teacher_model()
+        teacher_net.load_state_dict(torch.load(args.teacher_path))
     teacher_net.eval()
-    return basic_net, net, teacher_net
+    return basic_net, net, teacher_net, lr, optimizer
 
 
 def train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer, exp_id=''):
@@ -267,14 +297,10 @@ def create_exp_id():
 def main():
     exp_id = create_exp_id()
     for loop in range(args.noisy_student_loop):
-        basic_net, net, teacher_net = build_model(loop=loop, exp_id=exp_id)
+        basic_net, net, teacher_net, lr, optimizer = build_model(loop=loop, exp_id=exp_id)
 
         writer = SummaryWriter(log_dir="runs/"+exp_id+f"_loop{loop}")
 
-        lr = args.lr
-        if args.student_init_as_best and loop > 0:
-            lr = lr * args.lr_decay_
-        optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=2e-4)
         KL_loss = nn.KLDivLoss()
         XENT_loss = nn.CrossEntropyLoss()
 
