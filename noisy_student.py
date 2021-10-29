@@ -26,19 +26,20 @@ parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of 
 parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 parser.add_argument('--noisy_student_loop', default=5)
-parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
-parser.add_argument('--student_init_as_best', default=False, help='initialize the student as the best ckpt')
+parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
+parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt')
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
-parser.add_argument('--droprate', default=0.5, help='dropout rate for the dropout added to the last layer')
+parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropout added to the last layer')
 parser.add_argument('--resume', default='', help='exp_id to load student ckpt to serve as the teacher')
 # parser.add_argument('--resume', default='1025/NoisyStudent__init_as_the_best__alpha0.5_gamma1_set0(1)', help='exp_id to load student ckpt to serve as the teacher')
-parser.add_argument('--output', default='1028', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='no_robust_teacher__drop0.5__alpha0.5_gamma1_set0')
+parser.add_argument('--train_val_split', default=1.0, help='the ratio to split trainset into training set and validation set')
+parser.add_argument('--output', default='1029', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='init_as_best__alpha0.5_gamma1_set0')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
-parser.add_argument('--num_steps', default=10)
-parser.add_argument('--step_size', default=16/255/10)
+parser.add_argument('--num_steps', default=20)
+parser.add_argument('--step_size', default=16/255/20)
 args = parser.parse_args()
 
 config = {
@@ -69,6 +70,11 @@ transform_test = transforms.Compose([
 ])
 if args.dataset == 'CIFAR10':
     trainset = torchvision.datasets.CIFAR10(root='../dataset', train=True, download=True, transform=transform_train)
+    if args.train_val_split < 1.0:
+        train_size = int(args.train_val_split * len(trainset))
+        val_size = len(trainset) - train_size
+        trainset, valset = torch.utils.data.random_split(trainset, [train_size, val_size])
+        valloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
     testset = torchvision.datasets.CIFAR10(root='../dataset', train=False, download=True, transform=transform_test)
     testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
@@ -260,6 +266,31 @@ def test(basic_net, net):
     return natural_acc, robust_acc
 
 
+def test_val(basic_net, net):
+    assert args.train_val_split < 1.0
+    net.eval()
+    adv_correct = 0
+    natural_correct = 0
+    total = 0
+    with torch.no_grad():
+        iterator = tqdm(valloader, ncols=0, leave=False)
+        for batch_idx, (inputs, targets) in enumerate(iterator):
+            inputs, targets = inputs.to(device), targets.to(device)
+            adv_outputs, pert_inputs = net(inputs, targets)
+            natural_outputs = basic_net(inputs)
+            _, adv_predicted = adv_outputs.max(1)
+            _, natural_predicted = natural_outputs.max(1)
+            natural_correct += natural_predicted.eq(targets).sum().item()
+            total += targets.size(0)
+            adv_correct += adv_predicted.eq(targets).sum().item()
+            iterator.set_description(str(adv_predicted.eq(targets).sum().item()/targets.size(0)))
+    robust_acc = 100.*adv_correct/total
+    natural_acc = 100.*natural_correct/total
+    print('Natural acc:', natural_acc)
+    print('Robust acc:', robust_acc)
+    return natural_acc, robust_acc
+
+
 def save_model(basic_net, optimizer, exp_id, name):
     state = {
         'net': basic_net.state_dict(),
@@ -304,8 +335,8 @@ def main():
         KL_loss = nn.KLDivLoss()
         XENT_loss = nn.CrossEntropyLoss()
 
-        best_natural_val = .0
-        best_robust_val = .0
+        best_natural_val, best_natural_test = .0, .0
+        best_robust_val, best_robust_test = .0, .0
         for epoch in range(args.epochs):
             adjust_learning_rate(optimizer, epoch, lr)
             if args.no_robust_teacher and loop == 0:
@@ -313,15 +344,38 @@ def main():
             else:
                 train_loss = train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
             writer.add_scalar('train/loss', train_loss, epoch)
-            if (epoch+1)%args.val_period == 0:
-                natural_val, robust_val = test(basic_net, net)
-                if natural_val > best_natural_val:
-                    save_model(basic_net, optimizer, exp_id, '/best_natural.t7')
-                if robust_val > best_robust_val:
-                    save_model(basic_net, optimizer, exp_id, '/best_robust.t7')
-                writer.add_scalar('val/natural', natural_val, epoch)
-                writer.add_scalar('val/robust', robust_val, epoch)
+            if (epoch+1) % args.val_period == 0:
+                natural_test, robust_test = test(basic_net, net)
+                writer.add_scalar('test/natural', natural_test, epoch)
+                writer.add_scalar('test/robust', robust_test, epoch)
+                if args.train_val_split < 1.0:
+                    natural_val, robust_val = test_val(basic_net, net)
+                    writer.add_scalar('val/natural', natural_val, epoch)
+                    writer.add_scalar('val/robust', robust_val, epoch)
+                    # In this case, use validation set to select model
+                    if natural_val > best_natural_val:
+                        best_natural_val = natural_val
+                        save_model(basic_net, optimizer, exp_id, '/best_natural.t7')
+                    if robust_val > best_robust_val:
+                        best_robust_val = robust_val
+                        save_model(basic_net, optimizer, exp_id, '/best_robust.t7')
+                else:
+                    # In this case, use the test set to select model
+                    if natural_test > best_natural_test:
+                        save_model(basic_net, optimizer, exp_id, '/best_natural.t7')
+                    if robust_test > best_robust_test:
+                        save_model(basic_net, optimizer, exp_id, '/best_robust.t7')
+                if natural_test > best_natural_test:
+                    best_natural_test = natural_test
+                if robust_test > best_robust_test:
+                    best_robust_test = robust_test
+                writer.add_scalar('best/natural', best_natural_test, epoch)
+                writer.add_scalar('best/robust', best_robust_test, epoch)
 
 
 if __name__ == '__main__':
     main()
+
+    # # test the resume ckpt:
+    # basic_net, net, teacher_net, lr, optimizer = build_model()
+    # test(basic_net, net)
