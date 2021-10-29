@@ -21,7 +21,7 @@ parser.add_argument('--teacher_model', default = 'WideResNet', type = str, help 
 parser.add_argument('--teacher_path', default = '../checkpoint/trades/model_cifar_wrn.pt', type=str, help='path of teacher net being distilled')
 parser.add_argument('--temp', default=1.0, type=float, help='temperature for distillation')
 parser.add_argument('--val_period', default=1, type=int, help='print every __ epoch')
-parser.add_argument('--save_period', default=1, type=int, help='save every __ epoch')
+parser.add_argument('--save_period', default=10000, type=int, help='save every __ epoch')
 parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of losses')
 parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
