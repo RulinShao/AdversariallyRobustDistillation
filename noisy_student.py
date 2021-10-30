@@ -26,7 +26,7 @@ parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of 
 parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 parser.add_argument('--noisy_student_loop', default=5)
-parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
+parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
 parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt')
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
 parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropout added to the last layer')
@@ -34,7 +34,7 @@ parser.add_argument('--resume', default='', help='exp_id to load student ckpt to
 # parser.add_argument('--resume', default='1025/NoisyStudent__init_as_the_best__alpha0.5_gamma1_set0(1)', help='exp_id to load student ckpt to serve as the teacher')
 parser.add_argument('--train_val_split', default=1.0, help='the ratio to split trainset into training set and validation set')
 parser.add_argument('--output', default='1029', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='init_as_the_best__alpha0.5_gamma1_set0')
+parser.add_argument('--exp_note', default='no_robust_teacher__init_as_the_best__alpha0.5_gamma1_set0')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
