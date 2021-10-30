@@ -32,9 +32,9 @@ parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate w
 parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropout added to the last layer')
 parser.add_argument('--resume', default='', help='exp_id to load student ckpt to serve as the teacher')
 # parser.add_argument('--resume', default='1025/NoisyStudent__init_as_the_best__alpha0.5_gamma1_set0(1)', help='exp_id to load student ckpt to serve as the teacher')
-parser.add_argument('--train_val_split', default=1.0, help='the ratio to split trainset into training set and validation set')
+parser.add_argument('--train_val_split', default=0.8, help='the ratio to split trainset into training set and validation set')
 parser.add_argument('--output', default='1029', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='init_as_best__alpha0.5_gamma1_set0')
+parser.add_argument('--exp_note', default='init_as_best__alpha0.5_gamma1_set0__train0.8')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
