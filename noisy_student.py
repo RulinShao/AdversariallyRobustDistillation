@@ -31,9 +31,9 @@ parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of da
 # For iterative distillation
 parser.add_argument('--noisy_student_loop', default=5)
 parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
-parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt on test set')
+parser.add_argument('--student_init_as_best', default=False, help='initialize the student as the best ckpt on test set')
 parser.add_argument('--train_val_split', default=0.8, help='split a validation set to select model')
-parser.add_argument('--use_last_student', default=False, help='use the last ckpt as the teacher')
+# parser.add_argument('--use_last_student', default=False, help='use the last ckpt as the teacher')
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
 parser.add_argument('--droprate', default=0.5, help='dropout rate for the dropout added to the last layer')
 parser.add_argument('--resume', default='', help='exp_id to load student ckpt to serve as the teacher')
@@ -44,7 +44,7 @@ parser.add_argument('--resume', default='', help='exp_id to load student ckpt to
 
 # Experiment id
 parser.add_argument('--output', default='1031', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='no_robust_teacher__drop0.5__init_as_the_best__alpha0.5_gamma1_set0__train0.8')
+parser.add_argument('--exp_note', default='no_robust_teacher__drop0.5__alpha0.5_gamma1_set0__train0.8')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
