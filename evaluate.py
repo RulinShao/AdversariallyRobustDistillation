@@ -28,7 +28,9 @@ args = parser.parse_args()
 
 logger = logging.getLogger(__name__)
 fh = logging.FileHandler('eval.log')
+fh.setLevel(logging.INFO)
 ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 fh.setFormatter(formatter)
 ch.setFormatter(formatter)
@@ -41,7 +43,7 @@ if device == 'cuda':
     cudnn.benchmark = True
 
 
-print('==> Preparing data..')
+logger.info('==> Preparing data..')
 transform_test = transforms.Compose([
     transforms.ToTensor(),
 ])
