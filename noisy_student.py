@@ -29,21 +29,22 @@ parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 
 # For iterative distillation
-parser.add_argument('--noisy_student_loop', default=5)
+parser.add_argument('--noisy_student_loop', default=3)
 parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
 parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt on test set')
 parser.add_argument('--train_val_split', default=1.0, help='split a validation set to select model')
 # parser.add_argument('--use_last_student', default=False, help='use the last ckpt as the teacher')
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
 parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropout added to the last layer')
-parser.add_argument('--resume', default='1031/NoisyStudent__init_as_the_best__alpha0.5_gamma1_set0(1)_loop4', help='exp_id to load student ckpt to serve as the teacher')
+parser.add_argument('--resume', default='1031/NoisyStudent__init_as_the_best__alpha0.5_gamma1_set0(1)', help='exp_id to load student ckpt to serve as the teacher')
+parser.add_argument('--resume_loop', default=4, help='index from 0')
 
 # For selecting the checkpoint as the teacher
 
 
 # Experiment id (if not resume)
 parser.add_argument('--output', default='1105', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='no_robust_teacher__set0')
+parser.add_argument('--exp_note', default='')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
@@ -337,7 +338,7 @@ def evaluate(test_student_path):
 def create_exp_id():
     prefix = f"{args.output}/NoisyStudent__{args.exp_note}"
     if args.resume:
-        prefix = args.resume + '__resume'
+        prefix = args.resume
     i = 1
     exp_id = prefix + f"({i})"
     while os.path.isdir(prefix + f"({i})"):
@@ -357,7 +358,10 @@ def main():
     for loop in range(args.noisy_student_loop):
         basic_net, net, teacher_net, lr, optimizer = build_model(loop=loop, exp_id=exp_id)
 
-        writer = SummaryWriter(log_dir="runs/"+exp_id+f"_loop{loop}")
+        if args.resume:
+            writer = SummaryWriter(log_dir="runs/" + exp_id + f"_loop{loop+args.resume_loop+1}")
+        else:
+            writer = SummaryWriter(log_dir="runs/"+exp_id+f"_loop{loop}")
 
         for epoch in range(args.epochs):
             adjust_learning_rate(optimizer, epoch, lr)
@@ -394,7 +398,7 @@ def main():
                     best_robust_test = robust_test
                 writer.add_scalar('best/natural', best_natural_test, epoch)
                 writer.add_scalar('best/robust', best_robust_test, epoch)
-        save_model(basic_net, optimizer, exp_id, f"loop{loop}_last.t7")
+        save_model(basic_net, optimizer, exp_id, f"/loop{loop}_last.t7")
 
 
 if __name__ == '__main__':
