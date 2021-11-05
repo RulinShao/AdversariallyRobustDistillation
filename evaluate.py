@@ -34,6 +34,7 @@ fh.setFormatter(formatter)
 ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
+logger.info(args)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 if device == 'cuda':
