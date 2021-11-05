@@ -5,7 +5,6 @@ import numpy as np
 import os
 import random
 import argparse
-import logging
 
 from autoattack import AutoAttack
 
@@ -25,25 +24,14 @@ parser.add_argument('--num_steps', default=20)
 # fixed parameters
 parser.add_argument('--data_dir', default='../dataset', help='path to dataset')
 args = parser.parse_args()
-
-logger = logging.getLogger(__name__)
-fh = logging.FileHandler('eval.log')
-fh.setLevel(logging.INFO)
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
-fh.setFormatter(formatter)
-ch.setFormatter(formatter)
-logger.addHandler(fh)
-logger.addHandler(ch)
-logger.info(args)
+print(args)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 if device == 'cuda':
     cudnn.benchmark = True
 
 
-logger.info('==> Preparing data..')
+print('==> Preparing data..')
 transform_test = transforms.Compose([
     transforms.ToTensor(),
 ])
@@ -70,7 +58,7 @@ def seed_everything(seed):
 
 
 def load_model(model_name=args.model):
-    logger.info('==> Building model..' + model_name)
+    print('==> Building model..' + model_name)
     if model_name == 'MobileNetV2':
         basic_net = MobileNetV2(num_classes=num_classes)
     elif model_name == 'WideResNet':
@@ -86,7 +74,7 @@ def load_model(model_name=args.model):
 
 
 def evaluate(model):
-    logger.info('==> Evaluating clean accuray..')
+    print('==> Evaluating clean accuray..')
     criterion = nn.CrossEntropyLoss()
     val_accuracy, val_loss = 0.0, 0.0
     with torch.no_grad():
@@ -97,12 +85,12 @@ def evaluate(model):
             acc = (outputs.argmax(axis=-1) == labels).float().mean()
             val_accuracy += acc / len(testloader)
             val_loss += loss / len(testloader)
-    logger.info(f"Test Loss: {val_loss}, Clean Accuracy: {val_accuracy}")
+    print(f"  Test Loss: {val_loss}, Clean Accuracy: {val_accuracy}")
 
 
 def pgd_attack(model):
     robust_acc = []
-    logger.info('==> Testing with PGD...')
+    print('==> Testing with PGD...')
     for eps in args.epsilons:
         step_size = 2 * eps / args.num_steps
         adv_correct, total = 0, 0
@@ -122,12 +110,12 @@ def pgd_attack(model):
             adv_correct += adv_predicted.eq(targets).sum().item()
             total += targets.size(0)
         robust_acc.append(adv_correct / total)
-        logger.info(f"Step {args.num_steps}, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f} %")
+        print(f"  Step {args.num_steps}, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f} %")
     return robust_acc
 
 
 def auto_attack(model):
-    logger.info('==> Testing with AutoAttack...')
+    print('==> Testing with AutoAttack...')
     attack = AutoAttack
     robust_acc = []
     for eps in args.epsilons:
@@ -140,12 +128,12 @@ def auto_attack(model):
             adv_correct += adv_predicted.eq(targets).sum().item()
             total += targets.size(0)
     robust_acc.append(adv_correct / total)
-    logger.info(f"AutoAttack, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f} %")
+    print(f"  AutoAttack, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f} %")
 
 
 if __name__ == "__main__":
     model = load_model()
-    logger.info(f"==> Testing {args.model} loaded from {args.model_path} on {args.dataset}, random seed: {args.seed}")
+    print(f"==> Testing {args.model} loaded from {args.model_path} on {args.dataset}, random seed: {args.seed}")
     if 'clean' in args.mode:
         evaluate(model)
     if 'pgd' in args.mode:
