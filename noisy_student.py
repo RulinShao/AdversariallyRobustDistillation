@@ -29,9 +29,9 @@ parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 
 # For iterative distillation
-parser.add_argument('--noisy_student_loop', default=5)
-parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
-parser.add_argument('--student_init_as_best', default=False, help='initialize the student as the best ckpt on test set')
+parser.add_argument('--noisy_student_loop', default=7)
+parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
+parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt on test set')
 parser.add_argument('--train_val_split', default=1.0, help='split a validation set to select model')
 # parser.add_argument('--use_last_student', default=False, help='use the last ckpt as the teacher')
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
@@ -43,8 +43,8 @@ parser.add_argument('--resume', default='', help='exp_id to load student ckpt to
 
 
 # Experiment id
-parser.add_argument('--output', default='1031', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='no_robust_teacher__drop0.5__alpha0.5_gamma1_set0')
+parser.add_argument('--output', default='1105', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='init_as_the_best__drop0.5__set0')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
