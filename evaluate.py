@@ -78,9 +78,8 @@ def load_model(model_name=args.model):
     return basic_net.eval()
 
 
-def evaluate():
+def evaluate(model):
     logger.info('==> Evaluating clean accuray..')
-    model = load_model()
     criterion = nn.CrossEntropyLoss()
     val_accuracy, val_loss = 0.0, 0.0
     with torch.no_grad():
@@ -94,8 +93,7 @@ def evaluate():
     logger.info(f"Test Loss: {val_loss}, Clean Accuracy: {val_accuracy}")
 
 
-def pgd_attack():
-    model = load_model()
+def pgd_attack(model):
     robust_acc = []
     logger.info('==> Testing with PGD...')
     for eps in args.epsilons:
@@ -121,9 +119,8 @@ def pgd_attack():
     return robust_acc
 
 
-def auto_attack():
+def auto_attack(model):
     logger.info('==> Testing with AutoAttack...')
-    model = load_model()
     attack = AutoAttack
     robust_acc = []
     for eps in args.epsilons:
@@ -140,10 +137,11 @@ def auto_attack():
 
 
 if __name__ == "__main__":
+    model = load_model()
     logger.info(f"==> Testing {args.model} loaded from {args.model_path} on {args.dataset}, random seed: {args.seed}")
     if 'clean' in args.mode:
-        evaluate()
+        evaluate(model)
     if 'pgd' in args.mode:
-        pgd_attack()
+        pgd_attack(model)
     if 'auto' in args.mode:
-        auto_attack()
+        auto_attack(model)
