@@ -63,7 +63,7 @@ def seed_everything(seed):
 
 
 def load_model(model_name=args.model):
-    print('==> Building model..' + model_name)
+    logger.info('==> Building model..' + model_name)
     if model_name == 'MobileNetV2':
         basic_net = MobileNetV2(num_classes=num_classes)
     elif model_name == 'WideResNet':
@@ -79,6 +79,7 @@ def load_model(model_name=args.model):
 
 
 def evaluate():
+    logger.info('==> Evaluating clean accuray..')
     model = load_model()
     criterion = nn.CrossEntropyLoss()
     val_accuracy, val_loss = 0.0, 0.0
@@ -96,7 +97,7 @@ def evaluate():
 def pgd_attack():
     model = load_model()
     robust_acc = []
-    logger.info('Testing with PGD...')
+    logger.info('==> Testing with PGD...')
     for eps in args.epsilons:
         step_size = 2 * eps / args.num_steps
         adv_correct, total = 0, 0
@@ -121,7 +122,7 @@ def pgd_attack():
 
 
 def auto_attack():
-    logger.info('Testing with AutoAttack...')
+    logger.info('==> Testing with AutoAttack...')
     model = load_model()
     attack = AutoAttack
     robust_acc = []
@@ -139,7 +140,7 @@ def auto_attack():
 
 
 if __name__ == "__main__":
-    logger.info(f"Testing {args.model} loaded from {args.model_path} on {args.dataset}, random seed: {args.seed}")
+    logger.info(f"==> Testing {args.model} loaded from {args.model_path} on {args.dataset}, random seed: {args.seed}")
     if 'clean' in args.mode:
         evaluate()
     if 'pgd' in args.mode:
