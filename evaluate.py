@@ -27,9 +27,13 @@ parser.add_argument('--data_dir', default='../dataset', help='path to dataset')
 args = parser.parse_args()
 
 logger = logging.getLogger(__name__)
-logger_handlers = [logging.FileHandler('eval.log'), logging.StreamHandler()]
-logging.basicConfig(format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S', handlers=logger_handlers)
-
+fh = logging.FileHandler('eval.log')
+ch = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+fh.setFormatter(formatter)
+ch.setFormatter(formatter)
+logger.addHandler(fh)
+logger.addHandler(ch)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 if device == 'cuda':
