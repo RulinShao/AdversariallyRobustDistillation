@@ -20,7 +20,7 @@ parser.add_argument('--mode', default=['clean', 'pgd', 'auto'], help='terms be e
 # for PGD attack
 parser.add_argument('--seed', default=310)
 parser.add_argument('--batch_size', default=100)
-parser.add_argument('--epsilons', default=[])
+parser.add_argument('--epsilons', default=[(i+1)/255 for i in range(8)])
 parser.add_argument('--num_steps', default=20)
 # fixed parameters
 parser.add_argument('--data_dir', default='../dataset', help='path to dataset')
