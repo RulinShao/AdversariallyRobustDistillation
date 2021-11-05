@@ -110,7 +110,7 @@ def pgd_attack(model):
             adv_correct += adv_predicted.eq(targets).sum().item()
             total += targets.size(0)
         robust_acc.append(adv_correct / total)
-        print(f"  Step {args.num_steps}, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f} %")
+        print(f"  Step {args.num_steps}, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f}")
     return robust_acc
 
 
@@ -128,7 +128,7 @@ def auto_attack(model):
             adv_correct += adv_predicted.eq(targets).sum().item()
             total += targets.size(0)
     robust_acc.append(adv_correct / total)
-    print(f"  AutoAttack, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f} %")
+    print(f"  AutoAttack, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f}")
 
 
 if __name__ == "__main__":
