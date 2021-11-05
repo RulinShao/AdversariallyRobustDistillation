@@ -65,7 +65,7 @@ def seed_everything(seed):
 def load_model(model_name=args.model):
     print('==> Building model..' + model_name)
     if model_name == 'MobileNetV2':
-        basic_net = MobileNetV2(num_classes=num_classes, droprate=args.droprate)
+        basic_net = MobileNetV2(num_classes=num_classes)
     elif model_name == 'WideResNet':
         basic_net = WideResNet(num_classes=num_classes)
     elif model_name == 'ResNet18':
