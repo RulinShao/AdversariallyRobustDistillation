@@ -29,9 +29,9 @@ parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 
 # For iterative distillation
-parser.add_argument('--noisy_student_loop', default=3)
+parser.add_argument('--noisy_student_loop', default=5)
 parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
-parser.add_argument('--student_init_as_best', default=False, help='initialize the student as the best ckpt on test set')
+parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt on test set')
 parser.add_argument('--train_val_split', default=1.0, help='split a validation set to select model')
 # parser.add_argument('--use_last_student', default=False, help='use the last ckpt as the teacher')
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
@@ -365,7 +365,7 @@ def main():
 
         for epoch in range(args.epochs):
             adjust_learning_rate(optimizer, epoch, lr)
-            if args.no_robust_teacher and loop == 0:
+            if args.no_robust_teacher and loop == 0 and not args.resume:
                 train_loss = train_CE(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
             else:
                 train_loss = train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
