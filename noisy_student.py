@@ -43,8 +43,8 @@ parser.add_argument('--resume_loop', default=1, help='index from 0')
 
 
 # Experiment id (if not resume)
-parser.add_argument('--output', default='', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='')
+parser.add_argument('--output', default='1105', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='kdiga__drop0.5')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
