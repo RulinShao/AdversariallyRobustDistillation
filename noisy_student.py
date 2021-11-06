@@ -35,7 +35,7 @@ parser.add_argument('--student_init_as_best', default=True, help='initialize the
 parser.add_argument('--train_val_split', default=1.0, help='split a validation set to select model')
 # parser.add_argument('--use_last_student', default=False, help='use the last ckpt as the teacher')
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
-parser.add_argument('--droprate', default=0.5, help='dropout rate for the dropout added to the last layer')
+parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropout added to the last layer')
 parser.add_argument('--resume', default='', help='exp_id to load student ckpt to serve as the teacher')
 parser.add_argument('--resume_loop', default=1, help='index from 0')
 
@@ -44,7 +44,7 @@ parser.add_argument('--resume_loop', default=1, help='index from 0')
 
 # Experiment id (if not resume)
 parser.add_argument('--output', default='1105', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='kdiga__drop0.5')
+parser.add_argument('--exp_note', default='kdiga')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
