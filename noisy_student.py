@@ -29,12 +29,12 @@ parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga
 parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 
 # For iterative distillation
-parser.add_argument('--noisy_student_loop', default=1)
+parser.add_argument('--noisy_student_loop', default=7)
 parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
-parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt on test set')
-parser.add_argument('--train_val_split', default=1.0, help='split a validation set to select model')
-# parser.add_argument('--use_last_student', default=False, help='use the last ckpt as the teacher')
-parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
+parser.add_argument('--student_init_as_best', default=False, help='initialize the student as the best ckpt on test set')
+parser.add_argument('--train_val_split', default=1.0, help='split a validation set to select the best model')
+parser.add_argument('--student_init_as_last', default=True, help='use the last ckpt as the teacher')
+parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best/last is True')
 parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropout added to the last layer')
 parser.add_argument('--resume', default='', help='exp_id to load student ckpt to serve as the teacher')
 parser.add_argument('--resume_loop', default=1, help='index from 0')
@@ -43,8 +43,8 @@ parser.add_argument('--resume_loop', default=1, help='index from 0')
 
 
 # Experiment id (if not resume)
-parser.add_argument('--output', default='1105', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='kdiga')
+parser.add_argument('--output', default='1107', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='robust_teacher__init_as_last')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
@@ -172,17 +172,20 @@ def build_model(loop=0, exp_id=None):
     if args.resume or loop > 0:
         teacher_net = build_teacher_model(args.model)
         if args.resume:
-            _, best_robust_path = best_paths(exp_id=args.resume)
-            # optimizer.load_state_dict(torch.load(best_robust_path)['optimizer'])
+            _, student_robust_path = best_paths(exp_id=args.resume)
+            # optimizer.load_state_dict(torch.load(student_robust_path)['optimizer'])
         else:
             assert exp_id is not None
-            if args.train_val_split < 1.0:
-                _, best_robust_path = best_val_paths(exp_id=exp_id)
+            if args.student_init_as_last:
+                assert not args.student_init_as_best
+                _, student_robust_path = last_paths(exp_id=exp_id, loop=loop)  # regard the last ckpt as the best
+            elif args.train_val_split < 1.0:
+                _, student_robust_path = best_val_paths(exp_id=exp_id)
             else:
-                _, best_robust_path = best_paths(exp_id=exp_id)
-        teacher_net.load_state_dict(torch.load(best_robust_path)['net'])
-        if args.student_init_as_best:
-            basic_net.load_state_dict(torch.load(best_robust_path)['net'])
+                _, student_robust_path = best_paths(exp_id=exp_id)
+        teacher_net.load_state_dict(torch.load(student_robust_path)['net'])
+        if args.student_init_as_best or args.student_init_as_last:
+            basic_net.load_state_dict(torch.load(student_robust_path)['net'])
     else:
         print(f"==> Loading teacher from {args.teacher_path}")
         teacher_net = build_teacher_model()
@@ -320,10 +323,16 @@ def best_paths(exp_id):
     robust_best  = './checkpoint/' + args.dataset + '/' + exp_id + '/best_robust.t7'
     return natural_best, robust_best
 
+
 def best_val_paths(exp_id):
     natural_val_best = './checkpoint/' + args.dataset + '/' + exp_id + '/best_val_natural.t7'
     robust_val_best = './checkpoint/' + args.dataset + '/' + exp_id + '/best_val_robust.t7'
     return natural_val_best, robust_val_best
+
+
+def last_paths(exp_id, loop):
+    last_ckpt_path  = './checkpoint/' + args.dataset + '/' + exp_id + f'/loop{loop-1}_last.t7'
+    return last_ckpt_path, last_ckpt_path
 
 
 def evaluate(test_student_path):
