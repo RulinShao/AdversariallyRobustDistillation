@@ -18,7 +18,7 @@ parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--lr_schedule', type=int, nargs='+', default=[50, 100], help='Decrease learning rate at these epochs.')
 parser.add_argument('--lr_factor', default=0.1, type=float, help='factor by which to decrease lr')
 parser.add_argument('--epochs', default=150, type=int, help='number of epochs for training')
-parser.add_argument('--model', default = 'MobileNetV2', type = str, help = 'student model name')
+parser.add_argument('--model', default = 'WideResNet', type = str, help = 'student model name')
 parser.add_argument('--teacher_model', default = 'WideResNet', type = str, help = 'initial teacher network model')
 parser.add_argument('--teacher_path', default = '../checkpoint/trades/model_cifar_wrn.pt', type=str, help='path of teacher net being distilled')
 parser.add_argument('--temp', default=1.0, type=float, help='temperature for distillation')
@@ -38,7 +38,7 @@ parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropou
 
 # Experiment id
 parser.add_argument('--output', default='1113', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='cifar100__mnv2__no_robust_teacher__best_student__best_teacher')
+parser.add_argument('--exp_note', default='cifar100__wrn__no_robust_teacher__best_student__best_teacher__gamma1')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
