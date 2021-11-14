@@ -25,7 +25,7 @@ parser.add_argument('--temp', default=1.0, type=float, help='temperature for dis
 parser.add_argument('--test_period', default=1, type=int, help='evaluate on the test set every __ epoch')
 parser.add_argument('--save_period', default=50, type=int, help='save every __ epoch')
 parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of losses')
-parser.add_argument('--gamma', default=100, type=float, help='use gamma/bs for iga')
+parser.add_argument('--gamma', default=1000, type=float, help='use gamma/bs for iga')
 parser.add_argument('--dataset', default = 'CIFAR100', type=str, help='name of dataset')
 
 # For iterative distillation
@@ -38,7 +38,7 @@ parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropou
 
 # Experiment id
 parser.add_argument('--output', default='1113', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='cifar100__wrn__no_robust_teacher__best_student__best_teacher__gamma100')
+parser.add_argument('--exp_note', default='cifar100__wrn__no_robust_teacher__best_student__best_teacher__gamma1000')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
