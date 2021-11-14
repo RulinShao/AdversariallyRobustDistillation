@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from models import *
 
 
-parser = argparse.ArgumentParser(description='IKDIGA CIFAR10 Training')
+parser = argparse.ArgumentParser(description='IKDIGA CIFAR Training')
 # Training parameteres for KDIGA
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--lr_schedule', type=int, nargs='+', default=[50, 100], help='Decrease learning rate at these epochs.')
@@ -26,11 +26,11 @@ parser.add_argument('--test_period', default=1, type=int, help='evaluate on the 
 parser.add_argument('--save_period', default=50, type=int, help='save every __ epoch')
 parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of losses')
 parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
-parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
+parser.add_argument('--dataset', default = 'CIFAR100', type=str, help='name of dataset')
 
 # For iterative distillation
 parser.add_argument('--iterative_loop', default=10)
-parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
+parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
 parser.add_argument('--student_init', default='best', choices=['best', 'last'], help='initialize the student as the best/last ckpt on test set')
 parser.add_argument('--teacher_init', default='best', choices=['best', 'last'])
 parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best/last is True')
@@ -38,7 +38,7 @@ parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropou
 
 # Experiment id
 parser.add_argument('--output', default='1113', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='mnv2__robust_teacher__best_student__best_teacher')
+parser.add_argument('--exp_note', default='cifar100__mnv2__no_robust_teacher__best_student__best_teacher')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
