@@ -170,7 +170,7 @@ def build_model(loop=0, exp_id=None):
         elif args.teacher_init == 'best':
             teacher_net = build_teacher_model(args.model)
             print(f"==> Loading teacher from the best path: {best_robust_path}")
-            teacher_net.load_state_dict(torch.load(last_robust_path)['net'])
+            teacher_net.load_state_dict(torch.load(best_robust_path)['net'])
         else:
             teacher_net = build_teacher_model()
             print(f"==> Loading teacher from the robust path: {args.teacher_path}")
