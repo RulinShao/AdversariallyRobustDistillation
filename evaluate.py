@@ -73,6 +73,13 @@ def load_model(model_name=args.model):
     return basic_net.eval()
 
 
+def count_parameters():
+    model = load_model(args.model)
+    count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"{args.model}: {count}")
+    return count
+
+
 def evaluate(model):
     print('==> Evaluating clean accuray..')
     criterion = nn.CrossEntropyLoss()
@@ -140,3 +147,5 @@ if __name__ == "__main__":
         pgd_attack(model)
     if 'auto' in args.mode:
         auto_attack(model)
+    if 'count' in args.mode:
+        count_parameters()
