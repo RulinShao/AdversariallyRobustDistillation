@@ -15,11 +15,11 @@ parser = argparse.ArgumentParser(description='Evaluate Robustness on CIFAR')
 parser.add_argument('--dataset', default='CIFAR10', type=str, choices=['CIFAR10', 'CIFAR100'])
 parser.add_argument('--model', default='MobileNetV2', type=str)
 parser.add_argument('--model_path', type=str)
-parser.add_argument('--mode', default=['clean', 'pgd', 'auto'], help='terms be evaluates, choose from clean, pgd, auto')
+parser.add_argument('--mode', default=['auto'], help='terms be evaluates, choose from clean, pgd, auto')
 # for PGD attack
 parser.add_argument('--seed', default=310)
 parser.add_argument('--batch_size', default=100)
-parser.add_argument('--epsilons', default=[(i+1)/255 for i in range(8)])
+parser.add_argument('--epsilons', default=[8/255])
 parser.add_argument('--num_steps', default=20)
 # fixed parameters
 parser.add_argument('--data_dir', default='../dataset', help='path to dataset')
@@ -134,8 +134,9 @@ def auto_attack(model):
             _, adv_predicted = model(x_adv).max(1)
             adv_correct += adv_predicted.eq(targets).sum().item()
             total += targets.size(0)
-    robust_acc.append(adv_correct / total)
-    print(f"  AutoAttack, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f}")
+        robust_acc.append(adv_correct / total)
+    for i in range(len(args.epsilons)):
+        print(f"  AutoAttack, Linf norm ≤ {args.epsilons[i]:<6}: {robust_acc[i]:1.4f}")
 
 
 if __name__ == "__main__":
