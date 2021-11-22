@@ -69,6 +69,7 @@ def load_model(model_name=args.model):
         raise AttributeError
     basic_net = basic_net.to(device)
     if args.model_path:
+        print(f"==> Loading {args.model} from {args.model_path}")
         basic_net.load_state_dict(torch.load(args.model_path)['net'])
     return basic_net.eval()
 

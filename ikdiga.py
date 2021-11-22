@@ -18,18 +18,18 @@ parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--lr_schedule', type=int, nargs='+', default=[50, 100], help='Decrease learning rate at these epochs.')
 parser.add_argument('--lr_factor', default=0.1, type=float, help='factor by which to decrease lr')
 parser.add_argument('--epochs', default=150, type=int, help='number of epochs for training')
-parser.add_argument('--model', default = 'WideResNet', type = str, help = 'student model name')
+parser.add_argument('--model', default = 'MobileNetV2', type = str, help = 'student model name')
 parser.add_argument('--teacher_model', default = 'WideResNet', type = str, help = 'initial teacher network model')
 parser.add_argument('--teacher_path', default = '../checkpoint/trades/model_cifar_wrn.pt', type=str, help='path of teacher net being distilled')
 parser.add_argument('--temp', default=1.0, type=float, help='temperature for distillation')
 parser.add_argument('--test_period', default=1, type=int, help='evaluate on the test set every __ epoch')
 parser.add_argument('--save_period', default=50, type=int, help='save every __ epoch')
 parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of losses')
-parser.add_argument('--gamma', default=10, type=float, help='use gamma/bs for iga')
-parser.add_argument('--dataset', default = 'CIFAR100', type=str, help='name of dataset')
+parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
+parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
 
 # For iterative distillation
-parser.add_argument('--iterative_loop', default=10)
+parser.add_argument('--iterative_loop', default=5)
 parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
 parser.add_argument('--student_init', default='best', choices=['best', 'last'], help='initialize the student as the best/last ckpt on test set')
 parser.add_argument('--teacher_init', default='best', choices=['best', 'last'])
@@ -37,8 +37,8 @@ parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate w
 parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropout added to the last layer')
 
 # Experiment id
-parser.add_argument('--output', default='1113', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='cifar100__wrn__no_robust_teacher__best_student__best_teacher__gamma10')
+parser.add_argument('--output', default='1121', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='cifar10__mnv2__no_robust_teacher__best_student__best_teacher')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
