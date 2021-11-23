@@ -41,7 +41,7 @@ if args.dataset == 'CIFAR10':
     num_classes = 10
 elif args.dataset == 'CIFAR100':
     testset = torchvision.datasets.CIFAR100(root=args.data_dir, train=False, download=True, transform=transform_test)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=1000, shuffle=False, num_workers=2)
     num_classes = 100
 else:
     raise AttributeError
