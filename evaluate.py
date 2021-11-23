@@ -130,6 +130,8 @@ def auto_attack(model):
         adversary = attack(model, norm='Linf', eps=eps)
         adv_correct, total = 0, 0
         for i, data in enumerate(testloader, 0):
+            if i * targets.size(0) >= 1000:
+                break
             inputs, targets = data[0].to(device), data[1].to(device)
             x_adv = adversary.run_standard_evaluation(inputs, targets)
             _, adv_predicted = model(x_adv).max(1)
