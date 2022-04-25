@@ -11,7 +11,7 @@ import os
 import argparse
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from models import *
+from model import *
 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')

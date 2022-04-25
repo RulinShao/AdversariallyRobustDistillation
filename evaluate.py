@@ -8,18 +8,18 @@ import argparse
 
 from autoattack import AutoAttack
 
-from models import *
+from model import *
 
 
 parser = argparse.ArgumentParser(description='Evaluate Robustness on CIFAR')
 parser.add_argument('--dataset', default='CIFAR10', type=str, choices=['CIFAR10', 'CIFAR100'])
 parser.add_argument('--model', default='MobileNetV2', type=str)
 parser.add_argument('--model_path', type=str)
-parser.add_argument('--mode', default=['clean', 'pgd', 'auto'], help='terms be evaluates, choose from clean, pgd, auto')
+parser.add_argument('--mode', default=['auto'], help='terms be evaluates, choose from clean, pgd, auto')
 # for PGD attack
 parser.add_argument('--seed', default=310)
-parser.add_argument('--batch_size', default=100)
-parser.add_argument('--epsilons', default=[(i+1)/255 for i in range(8)])
+parser.add_argument('--batch_size', default=1000, type=int)
+parser.add_argument('--epsilons', default=[8/255, 4/255])
 parser.add_argument('--num_steps', default=20)
 # fixed parameters
 parser.add_argument('--data_dir', default='../dataset', help='path to dataset')
@@ -65,12 +65,24 @@ def load_model(model_name=args.model):
         basic_net = WideResNet(num_classes=num_classes)
     elif model_name == 'ResNet18':
         basic_net = ResNet18(num_classes=num_classes)
+    elif model_name == 'PreActResNet18':
+        assert num_classes == 10
+        basic_net = PreActResNet18()
     else:
         raise AttributeError
     basic_net = basic_net.to(device)
     if args.model_path:
-        basic_net.load_state_dict(torch.load(args.model_path)['net'])
+        print(f"==> Loading {args.model} from {args.model_path}")
+        basic_net.load_state_dict(torch.load(args.model_path))
+        # basic_net.load_state_dict(torch.load(args.model_path)['net'])
     return basic_net.eval()
+
+
+def count_parameters():
+    model = load_model(args.model)
+    count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"{args.model}: {count}")
+    return count
 
 
 def evaluate(model):
@@ -123,12 +135,15 @@ def auto_attack(model):
         adv_correct, total = 0, 0
         for i, data in enumerate(testloader, 0):
             inputs, targets = data[0].to(device), data[1].to(device)
+            if i * targets.size(0) >= 1000:
+                break
             x_adv = adversary.run_standard_evaluation(inputs, targets)
             _, adv_predicted = model(x_adv).max(1)
             adv_correct += adv_predicted.eq(targets).sum().item()
             total += targets.size(0)
-    robust_acc.append(adv_correct / total)
-    print(f"  AutoAttack, Linf norm ≤ {eps:<6}: {robust_acc[-1]:1.4f}")
+        robust_acc.append(adv_correct / total)
+    for i in range(len(args.epsilons)):
+        print(f"  AutoAttack, Linf norm ≤ {args.epsilons[i]:<6}: {robust_acc[i]:1.4f}")
 
 
 if __name__ == "__main__":
@@ -140,3 +155,5 @@ if __name__ == "__main__":
         pgd_attack(model)
     if 'auto' in args.mode:
         auto_attack(model)
+    if 'count' in args.mode:
+        count_parameters()

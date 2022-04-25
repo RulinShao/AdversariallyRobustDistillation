@@ -5,46 +5,40 @@ from torch.autograd import grad
 import torchvision
 import torchvision.transforms as transforms
 import os
+import json
 import argparse
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from model import *
 
 
-parser = argparse.ArgumentParser(description='Noisy Student CIFAR10 Training')
+parser = argparse.ArgumentParser(description='IKDIGA CIFAR Training')
 # Training parameteres for KDIGA
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--lr_schedule', type=int, nargs='+', default=[50, 100], help='Decrease learning rate at these epochs.')
 parser.add_argument('--lr_factor', default=0.1, type=float, help='factor by which to decrease lr')
 parser.add_argument('--epochs', default=150, type=int, help='number of epochs for training')
-parser.add_argument('--model', default = 'MobileNetV2', type = str, help = 'student model name')
+parser.add_argument('--model', default = 'WideResNet', type = str, help = 'student model name')
 parser.add_argument('--teacher_model', default = 'WideResNet', type = str, help = 'initial teacher network model')
 parser.add_argument('--teacher_path', default = '../checkpoint/trades/model_cifar_wrn.pt', type=str, help='path of teacher net being distilled')
 parser.add_argument('--temp', default=1.0, type=float, help='temperature for distillation')
-parser.add_argument('--val_period', default=1, type=int, help='evaluate on the validation set (if split) every __ epoch')
 parser.add_argument('--test_period', default=1, type=int, help='evaluate on the test set every __ epoch')
-parser.add_argument('--save_period', default=10000, type=int, help='save every __ epoch')
+parser.add_argument('--save_period', default=50, type=int, help='save every __ epoch')
 parser.add_argument('--alpha', default=0.5, type=float, help='weight for sum of losses')
-parser.add_argument('--gamma', default=1, type=float, help='use gamma/bs for iga')
-parser.add_argument('--dataset', default = 'CIFAR10', type=str, help='name of dataset')
+parser.add_argument('--gamma', default=1000, type=float, help='use gamma/bs for iga')
+parser.add_argument('--dataset', default = 'CIFAR100', type=str, help='name of dataset')
 
 # For iterative distillation
-parser.add_argument('--noisy_student_loop', default=1)
-parser.add_argument('--no_robust_teacher', default=False, help='train with cross-entropy loss only in the first loop')
-parser.add_argument('--student_init_as_best', default=True, help='initialize the student as the best ckpt on test set')
-parser.add_argument('--train_val_split', default=1.0, help='split a validation set to select model')
-# parser.add_argument('--use_last_student', default=False, help='use the last ckpt as the teacher')
-parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best is True')
-parser.add_argument('--droprate', default=0.5, help='dropout rate for the dropout added to the last layer')
-parser.add_argument('--resume', default='', help='exp_id to load student ckpt to serve as the teacher')
-parser.add_argument('--resume_loop', default=1, help='index from 0')
+parser.add_argument('--iterative_loop', default=10)
+parser.add_argument('--no_robust_teacher', default=True, help='train with cross-entropy loss only in the first loop')
+parser.add_argument('--student_init', default='best', choices=['best', 'last'], help='initialize the student as the best/last ckpt on test set')
+parser.add_argument('--teacher_init', default='best', choices=['best', 'last'])
+parser.add_argument('--lr_decay_', default=0.01, help='decay the learning rate when --student_init_as_best/last is True')
+parser.add_argument('--droprate', default=0.0, help='dropout rate for the dropout added to the last layer')
 
-# For selecting the checkpoint as the teacher
-
-
-# Experiment id (if not resume)
-parser.add_argument('--output', default='', type=str, help='output subdirectory')
-parser.add_argument('--exp_note', default='')
+# Experiment id
+parser.add_argument('--output', default='1113', type=str, help='output subdirectory')
+parser.add_argument('--exp_note', default='cifar100__wrn__no_robust_teacher__best_student__best_teacher__gamma1000')
 
 # PGD attack
 parser.add_argument('--epsilon', default=8/255)
@@ -80,11 +74,6 @@ transform_test = transforms.Compose([
 ])
 if args.dataset == 'CIFAR10':
     trainset = torchvision.datasets.CIFAR10(root='../dataset', train=True, download=True, transform=transform_train)
-    if args.train_val_split < 1.0:
-        train_size = int(args.train_val_split * len(trainset))
-        val_size = len(trainset) - train_size
-        trainset, valset = torch.utils.data.random_split(trainset, [train_size, val_size])
-        valloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
     testset = torchvision.datasets.CIFAR10(root='../dataset', train=False, download=True, transform=transform_test)
     testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
@@ -145,59 +134,52 @@ def build_teacher_model(model_name=args.teacher_model):
     teacher_net = teacher_net.to(device)
     for param in teacher_net.parameters():
         param.requires_grad = False
-    return teacher_net
+    return teacher_net.eval()
 
 
 def build_model(loop=0, exp_id=None):
-    """
-    There are three situations:
-        1. args.resume passes an exp_id for loading ckpt. Then the teacher model will load from
-        the corresponding best robust model and optimizer as the teacher model, with a lr with args.lr_decay_
-        2. If not resume and loop=0, initialize the teacher (robust if args.no_robust_teacher is not True,
-         , student from scratch, and lr without decay
-        3. If not resume and loop>0, initialize the teacher as the best student in this exp, initialize the student
-        (from scratch with args.lr if args.student_init_as_best is False,
-        load the best ckpt with args.lr * args.lr_decay_ if True).
-    :param loop: loop index in noisy student training
-    :param exp_id: exp_id for loading the saved best robust ckpt
-    :return:
-    basic_net: student model,
-    net: student model wrapped with adv attack,
-    teacher_net: the teacher mdoel,
-    lr:learning rate,
-    optimizer: optimizer
-    """
+
     basic_net = build_student_model()
     net = AttackPGD(basic_net, config)
-    if args.resume or loop > 0:
-        teacher_net = build_teacher_model(args.model)
-        if args.resume:
-            _, best_robust_path = best_paths(exp_id=args.resume)
-            # optimizer.load_state_dict(torch.load(best_robust_path)['optimizer'])
+
+    if loop == 0:
+        if args.no_robust_teacher:
+            teacher_net = None
         else:
-            assert exp_id is not None
-            if args.train_val_split < 1.0:
-                _, best_robust_path = best_val_paths(exp_id=exp_id)
-            else:
-                _, best_robust_path = best_paths(exp_id=exp_id)
-        teacher_net.load_state_dict(torch.load(best_robust_path)['net'])
-        if args.student_init_as_best:
-            basic_net.load_state_dict(torch.load(best_robust_path)['net'])
+            teacher_net = build_teacher_model()
+            print(f"==> Loading teacher from the robust path: {args.teacher_path}")
+            teacher_net.load_state_dict(torch.load(args.teacher_path))
+
     else:
-        print(f"==> Loading teacher from {args.teacher_path}")
-        teacher_net = build_teacher_model()
-        teacher_net.load_state_dict(torch.load(args.teacher_path))
-    teacher_net.eval()
+        _, last_robust_path = last_paths(exp_id=exp_id, loop=loop)
+        _, best_robust_path = best_paths(exp_id=exp_id)
 
-    lr = args.lr
-    if args.resume or (args.student_init_as_best and loop > 0):
-        lr = lr * args.lr_decay_
-    optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=2e-4)
+        if args.student_init == 'last':
+            print(f"==> Loading student from the last path: {last_robust_path}")
+            basic_net.load_state_dict(torch.load(last_robust_path)['net'])
+        elif args.student_init == 'best':
+            print(f"==> Loading student from the best path: {best_robust_path}")
+            basic_net.load_state_dict(torch.load(best_robust_path)['net'])
+        else:
+            print(f"==> Training student from scratch")
 
-    return basic_net, net, teacher_net, lr, optimizer
+        if args.teacher_init == 'last':
+            teacher_net = build_teacher_model(args.model)
+            print(f"==> Loading teacher from the last path: {last_robust_path}")
+            teacher_net.load_state_dict(torch.load(last_robust_path)['net'])
+        elif args.teacher_init == 'best':
+            teacher_net = build_teacher_model(args.model)
+            print(f"==> Loading teacher from the best path: {best_robust_path}")
+            teacher_net.load_state_dict(torch.load(best_robust_path)['net'])
+        else:
+            teacher_net = build_teacher_model()
+            print(f"==> Loading teacher from the robust path: {args.teacher_path}")
+            teacher_net.load_state_dict(torch.load(args.teacher_path))
+
+    return basic_net, net, teacher_net
 
 
-def train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer, exp_id=''):
+def train(basic_net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer, exp_id=''):
     train_loss = 0
     iterator = tqdm(trainloader, ncols=0, leave=False)
     basic_net.train()
@@ -234,7 +216,7 @@ def train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimize
     return train_loss
 
 
-def train_CE(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer, exp_id=''):
+def train_CE(basic_net, XENT_loss, epoch, loop, optimizer, exp_id=''):
     train_loss = 0
     iterator = tqdm(trainloader, ncols=0, leave=False)
     basic_net.train()
@@ -280,31 +262,6 @@ def test(basic_net, net):
     return natural_acc, robust_acc
 
 
-def test_val(basic_net, net):
-    assert args.train_val_split < 1.0
-    net.eval()
-    adv_correct = 0
-    natural_correct = 0
-    total = 0
-    with torch.no_grad():
-        iterator = tqdm(valloader, ncols=0, leave=False)
-        for batch_idx, (inputs, targets) in enumerate(iterator):
-            inputs, targets = inputs.to(device), targets.to(device)
-            adv_outputs, pert_inputs = net(inputs, targets)
-            natural_outputs = basic_net(inputs)
-            _, adv_predicted = adv_outputs.max(1)
-            _, natural_predicted = natural_outputs.max(1)
-            natural_correct += natural_predicted.eq(targets).sum().item()
-            total += targets.size(0)
-            adv_correct += adv_predicted.eq(targets).sum().item()
-            iterator.set_description(str(adv_predicted.eq(targets).sum().item()/targets.size(0)))
-    robust_acc = 100.*adv_correct/total
-    natural_acc = 100.*natural_correct/total
-    print('Natural acc:', natural_acc)
-    print('Robust acc:', robust_acc)
-    return natural_acc, robust_acc
-
-
 def save_model(basic_net, optimizer, exp_id, name):
     state = {
         'net': basic_net.state_dict(),
@@ -314,11 +271,16 @@ def save_model(basic_net, optimizer, exp_id, name):
         os.makedirs('checkpoint/' + args.dataset + '/' + exp_id + '/', )
     torch.save(state, './checkpoint/' + args.dataset + '/' + exp_id + name)
 
+    if not os.path.isfile(os.path.join('checkpoint/' + args.dataset + '/' + exp_id, 'args.txt')):
+        with open(os.path.join('checkpoint/' + args.dataset + '/' + exp_id, 'args.txt'), 'w') as f:
+            json.dump(args.__dict__, f, indent=2)
+
 
 def best_paths(exp_id):
     natural_best = './checkpoint/' + args.dataset + '/' + exp_id + '/best_natural.t7'
     robust_best  = './checkpoint/' + args.dataset + '/' + exp_id + '/best_robust.t7'
     return natural_best, robust_best
+
 
 def best_val_paths(exp_id):
     natural_val_best = './checkpoint/' + args.dataset + '/' + exp_id + '/best_val_natural.t7'
@@ -326,8 +288,13 @@ def best_val_paths(exp_id):
     return natural_val_best, robust_val_best
 
 
+def last_paths(exp_id, loop):
+    last_ckpt_path  = './checkpoint/' + args.dataset + '/' + exp_id + f'/loop{loop-1}_last.t7'
+    return last_ckpt_path, last_ckpt_path
+
+
 def evaluate(test_student_path):
-    basic_net, net, teacher_net = build_model()
+    basic_net, net, _ = build_model()
     basic_net.load_state_dict(torch.load(test_student_path)['net'])
     basic_net.eval()
     natural_val, robust_val = test()
@@ -336,15 +303,14 @@ def evaluate(test_student_path):
 
 
 def create_exp_id():
-    prefix = f"{args.output}/NoisyStudent__{args.exp_note}"
-    if args.resume:
-        prefix = args.resume
+    prefix = f"{args.output}/ikdiga__{args.exp_note}"
     i = 1
     exp_id = prefix + f"({i})"
     while os.path.isdir(prefix + f"({i})"):
         i += 1
         exp_id = prefix + f"({i})"
     return exp_id
+
 
 def main():
     exp_id = create_exp_id()
@@ -355,47 +321,34 @@ def main():
     KL_loss = nn.KLDivLoss()
     XENT_loss = nn.CrossEntropyLoss()
 
-    for loop in range(args.noisy_student_loop):
-        basic_net, net, teacher_net, lr, optimizer = build_model(loop=loop, exp_id=exp_id)
+    for loop in range(args.iterative_loop):
+        basic_net, net, teacher_net = build_model(loop=loop, exp_id=exp_id)
+        lr = args.lr
+        if loop - int(args.no_robust_teacher) > 0 and args.student_init :
+            lr = lr * args.lr_decay_
+        optimizer = optim.SGD(net.parameters(), lr=lr, momentum=0.9, weight_decay=2e-4)
 
-        if args.resume:
-            writer = SummaryWriter(log_dir="runs/" + exp_id + f"_loop{loop+args.resume_loop+1}")
-        else:
-            writer = SummaryWriter(log_dir="runs/"+exp_id+f"_loop{loop}")
+        writer = SummaryWriter(log_dir="runs/"+exp_id+f"_loop{loop}")
 
         for epoch in range(args.epochs):
             adjust_learning_rate(optimizer, epoch, lr)
-            if args.no_robust_teacher and loop == 0 and not args.resume:
-                train_loss = train_CE(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
+            if args.no_robust_teacher and loop == 0:
+                train_loss = train_CE(basic_net, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
             else:
-                train_loss = train(basic_net, net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
+                train_loss = train(basic_net, teacher_net, KL_loss, XENT_loss, epoch, loop, optimizer,exp_id=exp_id)
             writer.add_scalar('train/loss', train_loss, epoch)
-
-            # If have validation set, use valset to select best model
-            if (epoch+1) % args.val_period == 0 and args.train_val_split < 1.0:
-                natural_val, robust_val = test_val(basic_net, net)
-                if natural_val > best_natural_val:
-                    best_natural_val = natural_val
-                    save_model(basic_net, optimizer, exp_id, '/best_val_natural.t7')
-                if robust_val > best_robust_val:
-                    best_robust_val = robust_val
-                    save_model(basic_net, optimizer, exp_id, '/best_val_robust.t7')
-                writer.add_scalar('val/natural', natural_val, epoch)
-                writer.add_scalar('val/robust', robust_val, epoch)
 
             # evaluate on the testset
             if (epoch+1) % args.test_period == 0:
                 natural_test, robust_test = test(basic_net, net)
-                writer.add_scalar('test/natural', natural_test, epoch)
-                writer.add_scalar('test/robust', robust_test, epoch)
-                if natural_test > best_natural_test:
-                    save_model(basic_net, optimizer, exp_id, '/best_natural.t7')
-                if robust_test > best_robust_test:
-                    save_model(basic_net, optimizer, exp_id, '/best_robust.t7')
                 if natural_test > best_natural_test:
                     best_natural_test = natural_test
+                    save_model(basic_net, optimizer, exp_id, '/best_natural.t7')
                 if robust_test > best_robust_test:
                     best_robust_test = robust_test
+                    save_model(basic_net, optimizer, exp_id, '/best_robust.t7')
+                writer.add_scalar('test/natural', natural_test, epoch)
+                writer.add_scalar('test/robust', robust_test, epoch)
                 writer.add_scalar('best/natural', best_natural_test, epoch)
                 writer.add_scalar('best/robust', best_robust_test, epoch)
         save_model(basic_net, optimizer, exp_id, f"/loop{loop}_last.t7")
@@ -403,7 +356,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-    # # test the resume ckpt:
-    # basic_net, net, teacher_net, lr, optimizer = build_model()
-    # test(basic_net, net)
