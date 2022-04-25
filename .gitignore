@@ -6,3 +6,4 @@ checkpoint/
 log/
 models/
 nohup.out
+data/
