@@ -4,6 +4,9 @@ import logging
 import os
 import time
 from tqdm import tqdm
+import warnings
+
+warnings.filterwarnings('ignore')
 
 import numpy as np
 import torch
@@ -36,8 +39,9 @@ def get_args():
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--epsilon', default=8, type=int)
     parser.add_argument('--alpha', default=10, type=float, help='Step size')
-    parser.add_argument('--delta-init', default='random', choices=['zero', 'random', 'previous'],
+    parser.add_argument('--delta-init', default='previous', choices=['zero', 'random', 'previous'],
         help='Perturbation initialization method')
+    parser.add_argument('--log-intervel', default=10, type=int)
     parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/', type=str, help='Output directory')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
     parser.add_argument('--early-stop', action='store_true', help='Early stop if overfitting occurs')
@@ -108,53 +112,59 @@ def main():
     # Training
     prev_robust_acc = 0.
     start_train_time = time.time()
-    logger.info('Epoch \t Seconds \t LR \t \t Train Loss \t Train Acc')
+    logger.info('Epoch \t Seconds \t LR \t \t Train Loss \t Train Acc \t Test Loss \t Test Acc')
     for epoch in range(args.epochs):
         start_epoch_time = time.time()
         train_loss = 0
         train_acc = 0
         train_n = len(train_loader)
-        for i, (X, y) in tqdm(enumerate(train_loader)):
+        for i, (X, y) in enumerate(train_loader):
             X, y = X.cuda(), y.cuda()
-            # if i == 0:
-            #     first_batch = (X, y)
-            # if args.delta_init != 'previous':
-            #     delta = torch.zeros_like(X).cuda()
-            # # if args.delta_init == 'random':
-            # #     for j in range(len(epsilon)):
-            # #         delta[:, j, :, :].uniform_(-epsilon[j][0][0].item(), epsilon[j][0][0].item())
-            # #     delta.data = clamp(delta, lower_limit - X, upper_limit - X)
-            delta = torch.zeros_like(X).cuda()
-            delta.requires_grad = True
-            normal_pred = model(X + delta)
-            loss_s = F.cross_entropy(normal_pred, y)
-            grad_s = torch.autograd.grad(loss_s, delta, create_graph=True)[0]
+            if i == 0:
+                first_batch = (X, y)
+            if args.delta_init != 'previous':
+                delta = torch.zeros_like(X).cuda()
+            if args.delta_init == 'random':
+                for j in range(len(epsilon)):
+                    delta[:, j, :, :].uniform_(-epsilon[j][0][0].item(), epsilon[j][0][0].item())
+                delta.data = clamp(delta, lower_limit - X, upper_limit - X)
+            # delta = torch.zeros_like(X).cuda()
             
-            delta.data = clamp(delta + alpha * torch.sign(grad_s.detach()), -epsilon, epsilon)
-            delta.data[:X.size(0)] = clamp(delta[:X.size(0)], lower_limit - X, upper_limit - X)
-            delta = delta.detach()
-            adv_pred = model(X + delta[:X.size(0)])
-
-            delta = torch.zeros_like(X).cuda()
             delta.requires_grad = True
-            output_t = teacher_net(X + delta)
             with torch.enable_grad():
-                loss_t = F.cross_entropy(output_t, y)
-            grad_t = torch.autograd.grad(loss_t, delta)[0]
+                output_s_adv = model(X + delta[:X.size(0)])
+                ce_loss_adv = F.cross_entropy(output_s_adv, y)
+                grad_s_adv = torch.autograd.grad(ce_loss_adv, delta, create_graph=True)[0]
+                output_t_adv = teacher_net(X + delta[:X.size(0)])
+                loss_t_adv = F.cross_entropy(output_t_adv, y)
+                grad_t_adv = torch.autograd.grad(loss_t_adv, delta)[0]
+            
+            delta.data = clamp(delta + alpha * torch.sign(grad_s_adv.detach()), -epsilon, epsilon)
+            delta.data[:X.size(0)] = clamp(delta[:X.size(0)], lower_limit - X, upper_limit - X)
+            
+            # delta = delta.detach()
+            # adv_pred = model(X + delta[:X.size(0)])
+            # delta = torch.zeros_like(X).cuda()
+            # delta.requires_grad = True  
 
-            kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(normal_pred / args.temp, dim=1),
-                                                       F.softmax(output_t.detach() / args.temp, dim=1))
-            adv_loss = F.kl_div(adv_pred, normal_pred)
-            iga_loss = args.gama / X.shape[0] * (grad_s - grad_t).norm(2)
-            loss = loss_s + adv_loss + kd_loss + iga_loss
+            kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output_s_adv / args.temp, dim=1),
+                                                       F.softmax(output_t_adv.detach() / args.temp, dim=1))
+            # adv_loss = F.kl_div(adv_pred, output_s_adv)
+            iga_loss = (args.gama / X.shape[0]) * (grad_s_adv - grad_t_adv).norm(2) 
+            
+            loss = ce_loss_adv + kd_loss + iga_loss 
 
             opt.zero_grad()
             loss.backward()
-
             opt.step()
-            train_loss += loss.item() / train_n
-            train_acc += (normal_pred.max(1)[1] == y).to(dtype=torch.float).mean().item() / train_n
             scheduler.step()
+
+            train_loss_iter = loss.item() 
+            train_loss += train_loss_iter / train_n
+            train_acc_iter = (output_s_adv.max(1)[1] == y).to(dtype=torch.float).mean().item()
+            train_acc += train_acc_iter / train_n
+            if i % args.log_intervel == 0:
+                logger.info(f"Epoch: {epoch}, Iter: {i}, Train Loss: {train_loss_iter:.4f}, Train Acc: {train_acc_iter:.4f}")
         if args.early_stop:
             _, robust_acc = evaluate_autoattack(model, 1000)
             if robust_acc > prev_robust_acc:
@@ -164,8 +174,11 @@ def main():
                 break
         epoch_time = time.time()
         lr = scheduler.get_lr()[0]
-        logger.info('%d \t %.1f \t \t %.4f \t %.4f \t %.4f',
-            epoch, epoch_time - start_epoch_time, lr, train_loss, train_acc)
+        
+        test_loss, test_acc = evaluate_standard(test_loader, model)
+        logger.info('%d \t %.1f \t \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f',
+            epoch, epoch_time - start_epoch_time, lr, train_loss, train_acc, test_loss, test_acc)
+    
     train_time = time.time()
     if not args.early_stop:
         best_state_dict = model.state_dict()
@@ -174,13 +187,16 @@ def main():
 
     # Evaluation
     model_test = PreActResNet18().cuda()
-    model_test.load_state_dict(best_state_dict)
+    model_test.load_state_dict(torch.load(os.path.join(args.out_dir, 'model.pth')))
     model_test.float()
     model_test.eval()
 
     pgd_loss, pgd_acc = evaluate_pgd(test_loader, model_test, 50, 10)
     test_loss, test_acc = evaluate_standard(test_loader, model_test)
-    aa_loss, aa_acc = evaluate_autoattack(model_test)
+    try:
+        aa_loss, aa_acc = evaluate_autoattack(model_test)
+    except:
+        aa_loss, aa_acc = evaluate_autoattack(model_test, specify=['apgd-ce', 'fab'])
 
     logger.info('Test Loss \t Test Acc \t PGD Loss \t PGD Acc \t AA Loss \t AA Acc')
     logger.info('%.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f '%(test_loss, test_acc, pgd_loss, pgd_acc, aa_loss, aa_acc))

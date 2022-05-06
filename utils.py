@@ -192,7 +192,7 @@ if __name__ == '__main__':
     model_test.eval()
 
     test_loss = test_acc = pgd_loss = pgd_acc = aa_loss = aa_acc = - 1.0
-    aa_loss, aa_acc = evaluate_autoattack(model_test, n=2000, no_pp=args.no_pp)
+    aa_loss, aa_acc = evaluate_autoattack(model_test, n=2000, no_pp=args.no_pp, specify=['apgd-ce', 'fab'])
     pgd_loss, pgd_acc = evaluate_pgd(test_loader, model_test, 50, 10)
     test_loss, test_acc = evaluate_standard(test_loader, model_test)
     
