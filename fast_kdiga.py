@@ -176,7 +176,7 @@ def main():
         lr = scheduler.get_lr()[0]
         
         test_loss, test_acc = evaluate_standard(test_loader, model)
-        logger.info('%d \t %.1f \t \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f',
+        logger.info('Testing: %d \t %.1f \t \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f',
             epoch, epoch_time - start_epoch_time, lr, train_loss, train_acc, test_loss, test_acc)
     
     train_time = time.time()
@@ -186,6 +186,7 @@ def main():
     logger.info('Total train time: %.4f minutes', (train_time - start_train_time)/60)
 
     # Evaluation
+    logger.info('Evaluating ...')
     model_test = PreActResNet18().cuda()
     model_test.load_state_dict(torch.load(os.path.join(args.out_dir, 'model.pth')))
     model_test.float()
