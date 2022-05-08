@@ -31,7 +31,7 @@ def get_args():
     parser.add_argument('--alp', default=0.5, type=float)
     parser.add_argument('--temp', default=1., type=float)
     parser.add_argument('--gama', default=1000, type=int)
-    parser.add_argument('--epochs', default=30, type=int)
+    parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--lr-schedule', default='cyclic', choices=['cyclic', 'multistep'])
     parser.add_argument('--lr-min', default=0., type=float)
     parser.add_argument('--lr-max', default=0.2, type=float)
@@ -42,7 +42,7 @@ def get_args():
     parser.add_argument('--delta-init', default='previous', choices=['zero', 'random', 'previous'],
         help='Perturbation initialization method')
     parser.add_argument('--log-intervel', default=10, type=int)
-    parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/', type=str, help='Output directory')
+    parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/ep100/', type=str, help='Output directory')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
     parser.add_argument('--early-stop', action='store_true', help='Early stop if overfitting occurs')
     parser.add_argument('--opt-level', default='O2', type=str, choices=['O0', 'O1', 'O2'],
