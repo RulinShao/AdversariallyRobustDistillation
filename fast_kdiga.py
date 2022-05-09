@@ -130,7 +130,15 @@ def main():
                 delta.data = clamp(delta, lower_limit - X, upper_limit - X)
             # delta = torch.zeros_like(X).cuda()
             
+            opt.zero_grad()
             delta.requires_grad = True
+            with torch.enable_grad():
+                output_s_adv = model(X + delta[:X.size(0)])
+                ce_loss_adv = F.cross_entropy(output_s_adv, y)
+                ce_loss_adv.backward()
+            delta.data = clamp(delta + alpha * torch.sign(delta.grad.detach()), -epsilon, epsilon)
+            delta.data[:X.size(0)] = clamp(delta[:X.size(0)], lower_limit - X, upper_limit - X)
+
             with torch.enable_grad():
                 output_s_adv = model(X + delta[:X.size(0)])
                 ce_loss_adv = F.cross_entropy(output_s_adv, y)
@@ -139,13 +147,10 @@ def main():
                 loss_t_adv = F.cross_entropy(output_t_adv, y)
                 grad_t_adv = torch.autograd.grad(loss_t_adv, delta)[0]
             
-            delta.data = clamp(delta + alpha * torch.sign(grad_s_adv.detach()), -epsilon, epsilon)
-            delta.data[:X.size(0)] = clamp(delta[:X.size(0)], lower_limit - X, upper_limit - X)
-            
             # delta = delta.detach()
             # adv_pred = model(X + delta[:X.size(0)])
             # delta = torch.zeros_like(X).cuda()
-            # delta.requires_grad = True  
+            # delta.requires_grad = True
 
             kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output_s_adv / args.temp, dim=1),
                                                        F.softmax(output_t_adv.detach() / args.temp, dim=1))
@@ -153,8 +158,6 @@ def main():
             iga_loss = (args.gama / X.shape[0]) * (grad_s_adv - grad_t_adv).norm(2) 
             
             loss = ce_loss_adv + kd_loss + iga_loss 
-
-            opt.zero_grad()
             loss.backward()
             opt.step()
             scheduler.step()
