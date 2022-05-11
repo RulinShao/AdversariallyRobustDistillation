@@ -16,3 +16,16 @@ $ python main.py --teacher_path INSERT-YOUR-TEACHER-PATH
 ```
 ## Want to attack ARD?
 A MobileNetV2 ARD model distilled from a [TRADES](https://arxiv.org/pdf/1901.08573.pdf) WideResNet (34-10) teacher on CIFAR-10 can be found [here](https://drive.google.com/drive/folders/15Od-zi6HGwQoIym3AkLGzLVPaR8oH9UR?usp=sharing).
+
+
+
+# Note for `adv-v3`
+## May 10
+
+Follow the computation graph of delta in fast adversarial training:
+
+The delta takes the previous values and is fed into the student network and then clampped to a new delta. Note the loss in this round is backward, obtaining the first gradient of the student network.
+
+Then feed the new delta into both the student and the teacher network, calculate the new `ce_loss`, `kd_loss`, and `iga_loss` in this block.
+
+Sum up the three loss and do the second backward, getting the added gradients of the student model and do optimization step.

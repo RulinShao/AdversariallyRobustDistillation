@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', default=126, type=int)
+    parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/ep100/', type=str, help='Output directory')
     parser.add_argument('--data-dir', default='~/rulin/dataset', type=str)
     parser.add_argument('--teacher_path', default='../checkpoint/trades/model_cifar_wrn.pt', type=str)
     parser.add_argument('--alp', default=0.5, type=float)
@@ -42,7 +43,6 @@ def get_args():
     parser.add_argument('--delta-init', default='previous', choices=['zero', 'random', 'previous'],
         help='Perturbation initialization method')
     parser.add_argument('--log-intervel', default=10, type=int)
-    parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/ep100/', type=str, help='Output directory')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
     parser.add_argument('--early-stop', action='store_true', help='Early stop if overfitting occurs')
     parser.add_argument('--opt-level', default='O2', type=str, choices=['O0', 'O1', 'O2'],
@@ -128,24 +128,21 @@ def main():
                 for j in range(len(epsilon)):
                     delta[:, j, :, :].uniform_(-epsilon[j][0][0].item(), epsilon[j][0][0].item())
                 delta.data = clamp(delta, lower_limit - X, upper_limit - X)
-            # delta = torch.zeros_like(X).cuda()
             
             opt.zero_grad()
             delta.requires_grad = True
-            with torch.enable_grad():
-                output_s_adv = model(X + delta[:X.size(0)])
-                ce_loss_adv = F.cross_entropy(output_s_adv, y)
-                ce_loss_adv.backward()
+            output_s_adv = model(X + delta[:X.size(0)])
+            ce_loss_adv = F.cross_entropy(output_s_adv, y)
+            ce_loss_adv.backward()
             delta.data = clamp(delta + alpha * torch.sign(delta.grad.detach()), -epsilon, epsilon)
             delta.data[:X.size(0)] = clamp(delta[:X.size(0)], lower_limit - X, upper_limit - X)
 
-            with torch.enable_grad():
-                output_s_adv = model(X + delta[:X.size(0)])
-                ce_loss_adv = F.cross_entropy(output_s_adv, y)
-                grad_s_adv = torch.autograd.grad(ce_loss_adv, delta, create_graph=True)[0]
-                output_t_adv = teacher_net(X + delta[:X.size(0)])
-                loss_t_adv = F.cross_entropy(output_t_adv, y)
-                grad_t_adv = torch.autograd.grad(loss_t_adv, delta)[0]
+            output_s_adv = model(X + delta[:X.size(0)])
+            ce_loss_adv = F.cross_entropy(output_s_adv, y)
+            grad_s_adv = torch.autograd.grad(ce_loss_adv, delta, create_graph=True)[0]
+            output_t_adv = teacher_net(X + delta[:X.size(0)])
+            loss_t_adv = F.cross_entropy(output_t_adv, y)
+            grad_t_adv = torch.autograd.grad(loss_t_adv, delta)[0]
             
             # delta = delta.detach()
             # adv_pred = model(X + delta[:X.size(0)])
