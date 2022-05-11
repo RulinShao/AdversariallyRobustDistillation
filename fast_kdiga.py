@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from apex import amp
+from apex import amp
 from robustbench.utils import load_model
 
 from model.preact_resnet import PreActResNet18
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', default=126, type=int)
-    parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/ep100/', type=str, help='Output directory')
+    parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/debug/', type=str, help='Output directory')
     parser.add_argument('--data-dir', default='~/rulin/dataset', type=str)
     parser.add_argument('--teacher_path', default='../checkpoint/trades/model_cifar_wrn.pt', type=str)
     parser.add_argument('--alp', default=0.5, type=float)
@@ -93,10 +93,10 @@ def main():
     teacher_net.eval()
 
     opt = torch.optim.SGD(model.parameters(), lr=args.lr_max, momentum=args.momentum, weight_decay=args.weight_decay)
-    # amp_args = dict(opt_level=args.opt_level, loss_scale=args.loss_scale, verbosity=False)
-    # if args.opt_level == 'O2':
-    #     amp_args['master_weights'] = args.master_weights
-    # model, opt = amp.initialize(model, opt, **amp_args)
+    amp_args = dict(opt_level=args.opt_level, loss_scale=args.loss_scale, verbosity=False)
+    if args.opt_level == 'O2':
+        amp_args['master_weights'] = args.master_weights
+    model, opt = amp.initialize(model, opt, **amp_args)
     criterion = nn.CrossEntropyLoss()
 
     if args.delta_init == 'previous':
@@ -133,7 +133,8 @@ def main():
             delta.requires_grad = True
             output_s_adv = model(X + delta[:X.size(0)])
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
-            ce_loss_adv.backward()
+            with amp.scale_loss(ce_loss_adv, opt) as scaled_loss:
+                scaled_loss.backward()
             delta.data = clamp(delta + alpha * torch.sign(delta.grad.detach()), -epsilon, epsilon)
             delta.data[:X.size(0)] = clamp(delta[:X.size(0)], lower_limit - X, upper_limit - X)
 
@@ -155,7 +156,8 @@ def main():
             iga_loss = (args.gama / X.shape[0]) * (grad_s_adv - grad_t_adv).norm(2) 
             
             loss = ce_loss_adv + kd_loss + iga_loss 
-            loss.backward()
+            with amp.scale_loss(loss, opt) as scaled_loss:
+                scaled_loss.backward()
             opt.step()
             scheduler.step()
 
@@ -164,7 +166,7 @@ def main():
             train_acc_iter = (output_s_adv.max(1)[1] == y).to(dtype=torch.float).mean().item()
             train_acc += train_acc_iter / train_n
             if i % args.log_intervel == 0:
-                logger.info(f"Epoch: {epoch}, Iter: {i}, Train Loss: {train_loss_iter:.4f}, Train Acc: {train_acc_iter:.4f}")
+                logger.info(f"Epoch:{epoch}, Iter:{i}, Train Acc:{train_acc_iter:.4f}, Train Loss:{train_loss_iter:.4f}, CE_Loss:{ce_loss_adv.item():.4f}, KD_Loss:{kd_loss.item():.4f}, IGA_Loss:{iga_loss:.4f}")
         if args.early_stop:
             _, robust_acc = evaluate_autoattack(model, 1000)
             if robust_acc > prev_robust_acc:
