@@ -19,11 +19,13 @@ A MobileNetV2 ARD model distilled from a [TRADES](https://arxiv.org/pdf/1901.085
 
 
 
-# Note for `adv-v5`
+# Note for `adv-v6`
 ## May 11
 
-Involve clean samples in each round of distillation.
-Simply added one additional backward on the cross-entropy loss computed using clean images.
+
+* Involve clean samples in each round of distillation.
+* Added one additional backward on the cross-entropy loss computed using clean images.
+* Compute KD and IGA loss using clean images. (Forward clean images through the teacher network instead of perturbed images.)
 
 
 Others are the same as v4:
