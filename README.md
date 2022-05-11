@@ -19,8 +19,13 @@ A MobileNetV2 ARD model distilled from a [TRADES](https://arxiv.org/pdf/1901.085
 
 
 
-# Note for `adv-v3`
-## May 10
+# Note for `adv-v4`
+## May 11
+
+* Align with the teacher network only if the teacher makes correct prediction on this perturbed sample (`X + new_delta`).
+* Revised the iga loss: compute norm sample-wise, then calculate the mean of the batch.
+
+Others are the same as v3:
 
 Follow the computation graph of delta in fast adversarial training:
 

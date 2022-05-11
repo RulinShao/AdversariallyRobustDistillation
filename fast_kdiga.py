@@ -29,9 +29,8 @@ def get_args():
     parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/debug/', type=str, help='Output directory')
     parser.add_argument('--data-dir', default='~/rulin/dataset', type=str)
     parser.add_argument('--teacher_path', default='../checkpoint/trades/model_cifar_wrn.pt', type=str)
-    parser.add_argument('--alp', default=0.5, type=float)
     parser.add_argument('--temp', default=1., type=float)
-    parser.add_argument('--gama', default=1000, type=int)
+    parser.add_argument('--gama', default=1, type=int)
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--lr-schedule', default='cyclic', choices=['cyclic', 'multistep'])
     parser.add_argument('--lr-min', default=0., type=float)
@@ -52,6 +51,7 @@ def get_args():
     parser.add_argument('--master-weights', action='store_true',
         help='Maintain FP32 master weights to accompany any FP16 model weights, not applicable for O1 opt level')
     parser.add_argument('--resume', action='store_true')
+    parser.add_argument('--num_classes', default=10, type=int)
     return parser.parse_args()
 
 
@@ -142,18 +142,17 @@ def main():
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
             grad_s_adv = torch.autograd.grad(ce_loss_adv, delta, create_graph=True)[0]
             output_t_adv = teacher_net(X + delta[:X.size(0)])
+            t_correct = (output_t_adv.detach().max(1)[1] == y).to(dtype=torch.float)
             loss_t_adv = F.cross_entropy(output_t_adv, y)
             grad_t_adv = torch.autograd.grad(loss_t_adv, delta)[0]
-            
-            # delta = delta.detach()
-            # adv_pred = model(X + delta[:X.size(0)])
-            # delta = torch.zeros_like(X).cuda()
-            # delta.requires_grad = True
 
-            kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output_s_adv / args.temp, dim=1),
-                                                       F.softmax(output_t_adv.detach() / args.temp, dim=1))
-            # adv_loss = F.kl_div(adv_pred, output_s_adv)
-            iga_loss = (args.gama / X.shape[0]) * (grad_s_adv - grad_t_adv).norm(2) 
+            # Align iff teacher predicts right
+            t_correct_ = t_correct[:, None].repeat(1, args.num_classes)
+            kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output_s_adv / args.temp, dim=1) * t_correct_,
+                                                       F.softmax(output_t_adv.detach() / args.temp, dim=1) * t_correct_)
+            t_correct_ = t_correct[:, None, None, None].repeat([1]+list(grad_t_adv.detach().shape[1:]))
+            grad_diff = torch.flatten((grad_s_adv - grad_t_adv) * t_correct_, start_dim=1)
+            iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
             loss = ce_loss_adv + kd_loss + iga_loss 
             with amp.scale_loss(loss, opt) as scaled_loss:
