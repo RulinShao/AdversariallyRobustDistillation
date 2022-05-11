@@ -112,7 +112,6 @@ def main():
     # Training
     prev_robust_acc = 0.
     start_train_time = time.time()
-    logger.info('Epoch \t Seconds \t LR \t \t Train Loss \t Train Acc \t Test Loss \t Test Acc')
     for epoch in range(args.epochs):
         start_epoch_time = time.time()
         train_loss = 0
@@ -177,6 +176,7 @@ def main():
         lr = scheduler.get_lr()[0]
         
         test_loss, test_acc = evaluate_standard(test_loader, model)
+        logger.info('Epoch \t Seconds \t LR \t \t Train Loss \t Train Acc \t Test Loss \t Test Acc')
         logger.info('Testing: %d \t %.1f \t \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f',
             epoch, epoch_time - start_epoch_time, lr, train_loss, train_acc, test_loss, test_acc)
     
