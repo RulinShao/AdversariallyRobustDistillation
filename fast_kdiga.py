@@ -129,7 +129,13 @@ def main():
                     delta[:, j, :, :].uniform_(-epsilon[j][0][0].item(), epsilon[j][0][0].item())
                 delta.data = clamp(delta, lower_limit - X, upper_limit - X)
             
+            # backward gradient on clean samples
             opt.zero_grad()
+            output_s_clean = model(X)
+            ce_loss_clean = F.cross_entropy(output_s_clean, y)
+            with amp.scale_loss(ce_loss_clean, opt) as scaled_loss:
+                scaled_loss.backward()
+            
             delta.requires_grad = True
             output_s_adv = model(X + delta[:bs])
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
