@@ -23,7 +23,7 @@ A MobileNetV2 ARD model distilled from a [TRADES](https://arxiv.org/pdf/1901.085
 ## May 11
 
 Involve clean samples in each round of distillation.
-
+Simply added one additional backward on the clean images.
 
 
 Others are the same as v4:
