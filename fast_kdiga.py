@@ -146,11 +146,11 @@ def main():
             grad_t_adv = torch.autograd.grad(loss_t_adv, delta)[0]
 
             # Align iff teacher predicts right
-            t_correct_ = t_correct[:X.size(0), None].repeat(1, args.num_classes)
+            t_correct_ = t_correct[:, None].repeat(1, args.num_classes)
             kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output_s_adv / args.temp, dim=1) * t_correct_,
                                                        F.softmax(output_t_adv.detach() / args.temp, dim=1) * t_correct_)
-            t_correct_ = t_correct[:X.size(0), None, None, None].repeat([1]+list(grad_t_adv.detach().shape[1:]))
-            grad_diff = torch.flatten((grad_s_adv - grad_t_adv) * t_correct_, start_dim=1)
+            t_correct_ = t_correct[:, None, None, None].repeat([1]+list(grad_t_adv.detach().shape[1:]))
+            grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:X.size(0)] * t_correct_, start_dim=1)
             iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
             loss = ce_loss_adv + kd_loss + iga_loss 
