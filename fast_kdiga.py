@@ -131,10 +131,6 @@ def main():
             
             # backward gradient on clean samples
             opt.zero_grad()
-            output_s_clean = model(X)
-            ce_loss_clean = F.cross_entropy(output_s_clean, y)
-            with amp.scale_loss(ce_loss_clean, opt) as scaled_loss:
-                scaled_loss.backward()
             
             delta.requires_grad = True
             output_s_adv = model(X + delta[:bs])
@@ -146,12 +142,16 @@ def main():
 
             output_s_adv = model(X + delta[:bs])
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
+
+            X.requires_grad = True
+            output_s_clean = model(X)
+            ce_loss_clean = F.cross_entropy(output_s_clean, y)
             
-            grad_s_clean = torch.autograd.grad(ce_loss_clean, delta, create_graph=True)[0]
+            grad_s_clean = torch.autograd.grad(ce_loss_clean, X, create_graph=True)[0]
             output_t_clean = teacher_net(X)
             t_correct = (output_t_clean.detach().max(1)[1] == y).to(dtype=torch.float)
             loss_t_clean = F.cross_entropy(output_t_clean, y)
-            grad_t_clean = torch.autograd.grad(loss_t_clean, delta)[0]
+            grad_t_clean = torch.autograd.grad(loss_t_clean, X)[0]
 
             # Align iff teacher predicts right
             t_correct_ = t_correct[:, None].repeat(1, args.num_classes)
@@ -161,7 +161,7 @@ def main():
             grad_diff = torch.flatten((grad_s_clean - grad_t_clean)[:bs] * t_correct_, start_dim=1)
             iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
-            loss = ce_loss_adv + kd_loss + iga_loss 
+            loss = ce_loss_clean + ce_loss_adv + kd_loss + iga_loss 
             with amp.scale_loss(loss, opt) as scaled_loss:
                 scaled_loss.backward()
             opt.step()
