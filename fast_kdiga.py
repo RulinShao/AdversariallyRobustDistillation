@@ -119,6 +119,7 @@ def main():
         train_n = len(train_loader)
         for i, (X, y) in enumerate(train_loader):
             X, y = X.cuda(), y.cuda()
+            bs = X.size(0)
             if i == 0:
                 first_batch = (X, y)
             if args.delta_init != 'previous':
@@ -130,17 +131,17 @@ def main():
             
             opt.zero_grad()
             delta.requires_grad = True
-            output_s_adv = model(X + delta[:X.size(0)])
+            output_s_adv = model(X + delta[:bs])
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
             with amp.scale_loss(ce_loss_adv, opt) as scaled_loss:
                 scaled_loss.backward()
             delta.data = clamp(delta + alpha * torch.sign(delta.grad.detach()), -epsilon, epsilon)
-            delta.data[:X.size(0)] = clamp(delta[:X.size(0)], lower_limit - X, upper_limit - X)
+            delta.data[:bs] = clamp(delta[:bs], lower_limit - X, upper_limit - X)
 
-            output_s_adv = model(X + delta[:X.size(0)])
+            output_s_adv = model(X + delta[:bs])
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
             grad_s_adv = torch.autograd.grad(ce_loss_adv, delta, create_graph=True)[0]
-            output_t_adv = teacher_net(X + delta[:X.size(0)])
+            output_t_adv = teacher_net(X + delta[:bs])
             t_correct = (output_t_adv.detach().max(1)[1] == y).to(dtype=torch.float)
             loss_t_adv = F.cross_entropy(output_t_adv, y)
             grad_t_adv = torch.autograd.grad(loss_t_adv, delta)[0]
@@ -150,7 +151,7 @@ def main():
             kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output_s_adv / args.temp, dim=1) * t_correct_,
                                                        F.softmax(output_t_adv.detach() / args.temp, dim=1) * t_correct_)
             t_correct_ = t_correct[:, None, None, None].repeat([1]+list(grad_t_adv.detach().shape[1:]))
-            grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:X.size(0)] * t_correct_, start_dim=1)
+            grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:bs] * t_correct_, start_dim=1)
             iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
             loss = ce_loss_adv + kd_loss + iga_loss 
