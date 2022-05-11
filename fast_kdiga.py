@@ -146,18 +146,18 @@ def main():
 
             output_s_adv = model(X + delta[:bs])
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
-            grad_s_adv = torch.autograd.grad(ce_loss_adv, delta[:bs], create_graph=True)[0]
+            grad_s_adv = torch.autograd.grad(ce_loss_adv, delta, create_graph=True)[0]
             output_t_adv = teacher_net(X + delta[:bs])
             t_correct = (output_t_adv.detach().max(1)[1] == y).to(dtype=torch.float)
             loss_t_adv = F.cross_entropy(output_t_adv, y)
-            grad_t_adv = torch.autograd.grad(loss_t_adv, delta[:bs])[0]
+            grad_t_adv = torch.autograd.grad(loss_t_adv, delta)[0]
 
             # Align iff teacher predicts right
             t_correct_ = t_correct[:, None].repeat(1, args.num_classes)
             kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output_s_adv / args.temp, dim=1) * t_correct_,
                                                        F.softmax(output_t_adv.detach() / args.temp, dim=1) * t_correct_)
             t_correct_ = t_correct[:, None, None, None].repeat([1]+list(grad_t_adv.detach().shape[1:]))
-            grad_diff = torch.flatten((grad_s_adv - grad_t_adv) * t_correct_, start_dim=1)
+            grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:bs] * t_correct_, start_dim=1)
             iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
             loss = ce_loss_adv + kd_loss + iga_loss 
@@ -171,7 +171,7 @@ def main():
             train_acc_iter = (output_s_adv.max(1)[1] == y).to(dtype=torch.float).mean().item()
             train_acc += train_acc_iter / train_n
             if i % args.log_intervel == 0:
-                logger.info(f"Epoch:{epoch}, Iter:{i}, Train Acc:{train_acc_iter:.4f}, Train Loss:{train_loss_iter:.4f}, CE_Loss:{ce_loss_adv.item():.4f}, KD_Loss:{kd_loss.item():.4f}, IGA_Loss:{iga_loss:.4f}")
+                logger.info(f"Epoch:{epoch}, Iter:{i}, Train Acc:{train_acc_iter:.4f}, Train Loss:{train_loss_iter:.4f}, CE_Loss:{ce_loss_adv.item():.4f}, KD_Loss:{kd_loss.item():.4f}, IGA_Loss:{iga_loss:.4f}, Clean_Loss:{ce_loss_clean.item():.4f}")
         if args.early_stop:
             _, robust_acc = evaluate_autoattack(model, 1000)
             if robust_acc > prev_robust_acc:
