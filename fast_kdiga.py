@@ -34,7 +34,7 @@ def get_args():
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--lr-schedule', default='cyclic', choices=['cyclic', 'multistep'])
     parser.add_argument('--lr-min', default=0., type=float)
-    parser.add_argument('--lr-max', default=0.2, type=float)
+    parser.add_argument('--lr-max', default=0.1, type=float)
     parser.add_argument('--weight-decay', default=5e-4, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--epsilon', default=8, type=int)
