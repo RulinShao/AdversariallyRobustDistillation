@@ -152,7 +152,8 @@ def main():
             kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output_s_adv / args.temp, dim=1),
                                                        F.softmax(output_t_adv.detach() / args.temp, dim=1))
             # adv_loss = F.kl_div(adv_pred, output_s_adv)
-            iga_loss = (args.gama / X.shape[0]) * (grad_s_adv - grad_t_adv).norm(2) 
+            # iga_loss = (args.gama / X.shape[0]) * (grad_s_adv - grad_t_adv).norm(2) 
+            iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
             loss = ce_loss_adv + kd_loss + iga_loss 
             with amp.scale_loss(loss, opt) as scaled_loss:
