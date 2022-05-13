@@ -153,7 +153,7 @@ def main():
                                                        F.softmax(output_t_adv.detach() / args.temp, dim=1))
             # adv_loss = F.kl_div(adv_pred, output_s_adv)
             # iga_loss = (args.gama / X.shape[0]) * (grad_s_adv - grad_t_adv).norm(2) 
-            grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:bs], start_dim=1)
+            grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:X.size(0)], start_dim=1)
             iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
             loss = ce_loss_adv + kd_loss + iga_loss 
