@@ -19,9 +19,13 @@ A MobileNetV2 ARD model distilled from a [TRADES](https://arxiv.org/pdf/1901.085
 
 
 
-# Note for `adv-v6`
+# Note for `adv-v6-2`
 ## May 11
 
+* Modified `opt.zero_grad` poisition to backward the final loss only for parameter update.
+* Added losses coeficients.
+
+Others are the same as v6:
 
 * Involve clean samples in each round of distillation.
 * Added one additional backward on the cross-entropy loss computed using clean images.
