@@ -34,12 +34,12 @@ def get_args():
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--lr-schedule', default='cyclic', choices=['cyclic', 'multistep'])
     parser.add_argument('--lr-min', default=0., type=float)
-    parser.add_argument('--lr-max', default=0.1, type=float)
+    parser.add_argument('--lr-max', default=0.2, type=float)
     parser.add_argument('--weight-decay', default=5e-4, type=float)
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--epsilon', default=8, type=int)
     parser.add_argument('--alpha', default=10, type=float, help='Step size')
-    parser.add_argument('--delta-init', default='previous', choices=['zero', 'random', 'previous'],
+    parser.add_argument('--delta-init', default='random', choices=['zero', 'random', 'previous'],
         help='Perturbation initialization method')
     parser.add_argument('--log-intervel', default=10, type=int)
     parser.add_argument('--seed', default=0, type=int, help='Random seed')
@@ -129,7 +129,6 @@ def main():
                     delta[:, j, :, :].uniform_(-epsilon[j][0][0].item(), epsilon[j][0][0].item())
                 delta.data = clamp(delta, lower_limit - X, upper_limit - X)
             
-            opt.zero_grad()
             delta.requires_grad = True
             output_s_adv = model(X + delta[:bs])
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
@@ -154,7 +153,8 @@ def main():
             grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:bs] * t_correct_, start_dim=1)
             iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
-            loss = ce_loss_adv + kd_loss + iga_loss 
+            loss = 0.5 * ce_loss_adv + 0.5 *  kd_loss + iga_loss 
+            opt.zero_grad()
             with amp.scale_loss(loss, opt) as scaled_loss:
                 scaled_loss.backward()
             opt.step()
