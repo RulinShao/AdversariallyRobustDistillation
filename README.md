@@ -19,8 +19,13 @@ A MobileNetV2 ARD model distilled from a [TRADES](https://arxiv.org/pdf/1901.085
 
 
 
-# Note for `adv-v3`
-## May 10
+# Note for `adv-v3-2`
+## May 13
+
+* Modified `opt.zero_grad()` to update parameters onlu according to the final loss.
+* Added coeeficients for the losses.
+
+Others are the same as `adv-v3`:
 
 Follow the computation graph of delta in fast adversarial training:
 
