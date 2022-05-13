@@ -19,8 +19,13 @@ A MobileNetV2 ARD model distilled from a [TRADES](https://arxiv.org/pdf/1901.085
 
 
 
-# Note for `adv-v5`
-## May 11
+# Note for `adv-v5-2`
+## May 13
+
+* Modified the position of `opt.zero_grad()`
+* Added loss weighting
+
+Others are the same as v5:
 
 Involve clean samples in each round of distillation.
 Simply added one additional backward on the cross-entropy loss computed using clean images.
