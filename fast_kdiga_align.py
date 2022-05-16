@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', default=128, type=int)
-    parser.add_argument('--out-dir', default='fast_kdiga_output/Rebuff/debug4/', type=str, help='Output directory')
+    parser.add_argument('--out-dir', default='fast_kdiga_output/fast_kdiga_with_grad_align/', type=str, help='Output directory')
     parser.add_argument('--data-dir', default='~/rulin/dataset', type=str)
     parser.add_argument('--num_classes', default=10, type=int)
     parser.add_argument('--temp', default=1., type=float)
@@ -51,7 +51,8 @@ def get_args():
         help='If loss_scale is "dynamic", adaptively adjust the loss scale over time')
     parser.add_argument('--master-weights', action='store_true',
         help='Maintain FP32 master weights to accompany any FP16 model weights, not applicable for O1 opt level')
-    parser.add_argument('--description', default=None, type=str)
+    parser.add_argument('--description', default='Implemented fast kdiga with gradient alignment', type=str)
+    parser.add_argument('--grad_align_cos_lambda', default=0.2, type=float)
     return parser.parse_args()
 
 
@@ -59,6 +60,21 @@ def reset_delta(delta):
     delta = delta.detach()
     delta.requires_grad = True
     return delta
+
+
+def l2_norm_batch(v):
+    norms = (v ** 2).sum([1, 2, 3]) ** 0.5
+    return norms
+
+
+def cos_similarity(grad1, grad2):
+    grads_nnz_idx = ((grad1**2).sum([1, 2, 3])**0.5 != 0) * ((grad2**2).sum([1, 2, 3])**0.5 != 0)
+    grad1, grad2 = grad1[grads_nnz_idx], grad2[grads_nnz_idx]
+    grad1_norms, grad2_norms = l2_norm_batch(grad1), l2_norm_batch(grad2)
+    grad1_normalized = grad1 / grad1_norms[:, None, None, None]
+    grad2_normalized = grad2 / grad2_norms[:, None, None, None]
+    cos = torch.sum(grad1_normalized * grad2_normalized, (1, 2, 3))
+    return cos
 
 
 def main():
@@ -157,7 +173,17 @@ def main():
             t_correct_ = t_correct[:, None, None, None].repeat([1]+list(grad_t_adv.shape[1:]))
             grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:bs] * t_correct_, start_dim=1)
             iga_loss = torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
-            loss = 0.5 * ce_loss_adv + 0.5 *  kd_loss + args.gama * iga_loss 
+            # Grad Align regularizer
+            delta = torch.zeros_like(X, requires_grad=True)
+            output = model(X + delta)
+            loss = F.cross_entropy(output, y)
+            with amp.scale_loss(loss, opt) as scaled_loss:
+                grad1 = torch.autograd.grad(scaled_loss, delta, create_graph=True)[0]
+                grad1 /= scaled_loss / loss
+            grad2 = grad_s_adv.detach()
+            cos = cos_similarity(grad1, grad2)
+            reg = args.grad_align_cos_lambda * (1.0 - cos.mean())
+            loss = 0.5 * ce_loss_adv + 0.5 *  kd_loss + args.gama * iga_loss + reg
 
             opt.zero_grad()
             with amp.scale_loss(ce_loss_adv, opt) as scaled_loss:
