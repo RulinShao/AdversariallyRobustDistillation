@@ -36,7 +36,7 @@ def get_args():
     parser.add_argument('--momentum', default=0.9, type=float)
     parser.add_argument('--epsilon', default=8, type=int)
     parser.add_argument('--alpha', default=10, type=float, help='Step size')
-    parser.add_argument('--delta-init', default='previous', choices=['zero', 'random', 'previous'],
+    parser.add_argument('--delta-init', default='random', choices=['zero', 'random', 'previous'],
         help='Perturbation initialization method')
     parser.add_argument('--out-dir', default='train_fgsm_output', type=str, help='Output directory')
     parser.add_argument('--seed', default=0, type=int, help='Random seed')

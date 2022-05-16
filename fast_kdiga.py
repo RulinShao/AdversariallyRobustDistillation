@@ -112,11 +112,12 @@ def main():
     # Training
     prev_robust_acc = 0.
     start_train_time = time.time()
+    logger.info('Epoch \t Seconds \t LR \t \t Train Loss \t Train Acc \t Test Loss \t Test Acc')
     for epoch in range(args.epochs):
         start_epoch_time = time.time()
         train_loss = 0
         train_acc = 0
-        train_n = len(train_loader)
+        train_n = 0
         for i, (X, y) in enumerate(train_loader):
             X, y = X.cuda(), y.cuda()
             bs = X.size(0)
@@ -134,9 +135,10 @@ def main():
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
             with amp.scale_loss(ce_loss_adv, opt) as scaled_loss:
                 scaled_loss.backward()
-            delta.data = clamp(delta + alpha * torch.sign(delta.grad.detach()), -epsilon, epsilon)
+            grad = delta.grad.detach()
+            delta.data = clamp(delta + alpha * torch.sign(grad), -epsilon, epsilon)
             delta.data[:bs] = clamp(delta[:bs], lower_limit - X, upper_limit - X)
-
+            delta = delta.detach()
             output_s_adv = model(X + delta[:bs])
             ce_loss_adv = F.cross_entropy(output_s_adv, y)
             grad_s_adv = torch.autograd.grad(ce_loss_adv, delta, create_graph=True)[0]
@@ -154,18 +156,16 @@ def main():
             iga_loss = args.gama * torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
             
             loss = 0.5 * ce_loss_adv + 0.5 *  kd_loss + iga_loss 
+            # loss = ce_loss_adv
             opt.zero_grad()
             with amp.scale_loss(loss, opt) as scaled_loss:
                 scaled_loss.backward()
             opt.step()
+            train_loss += loss.item() * y.size(0)
+            train_acc += (output_s_adv.max(1)[1] == y).sum().item()
+            train_n += y.size(0)
             scheduler.step()
-
-            train_loss_iter = loss.item() 
-            train_loss += train_loss_iter / train_n
-            train_acc_iter = (output_s_adv.max(1)[1] == y).to(dtype=torch.float).mean().item()
-            train_acc += train_acc_iter / train_n
-            if i % args.log_intervel == 0:
-                logger.info(f"Epoch:{epoch}, Iter:{i}, Train Acc:{train_acc_iter:.4f}, Train Loss:{train_loss_iter:.4f}, CE_Loss:{ce_loss_adv.item():.4f}, KD_Loss:{kd_loss.item():.4f}, IGA_Loss:{iga_loss:.4f}")
+            
         if args.early_stop:
             _, robust_acc = evaluate_autoattack(model, 1000)
             if robust_acc > prev_robust_acc:
@@ -175,11 +175,9 @@ def main():
                 break
         epoch_time = time.time()
         lr = scheduler.get_lr()[0]
-        
         test_loss, test_acc = evaluate_standard(test_loader, model)
-        logger.info('Epoch \t Seconds \t LR \t \t Train Loss \t Train Acc \t Test Loss \t Test Acc')
         logger.info('Testing: %d \t %.1f \t \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f',
-            epoch, epoch_time - start_epoch_time, lr, train_loss, train_acc, test_loss, test_acc)
+            epoch, epoch_time - start_epoch_time, lr, train_loss/train_n, train_acc/train_n, test_loss, test_acc)
     
     train_time = time.time()
     if not args.early_stop:
