@@ -33,7 +33,7 @@ def get_args():
     parser.add_argument('--robustbench-teacher', default='Gowal2021Improving_28_10_ddpm_100m', type=str)
     parser.add_argument('--num_classes', default=10, type=int)
     parser.add_argument('--temp', default=1., type=float)
-    parser.add_argument('--iga_lambda', default=1, type=int)
+    parser.add_argument('--iga_lambda', default=1, type=float)
     parser.add_argument('--kd_lambda', default=0.5, type=float)
     parser.add_argument('--adv_lambda', default=0.5, type=float)
     parser.add_argument('--grad_align_cos_lambda', default=0.2, type=float)
@@ -55,7 +55,7 @@ def get_args():
         help='If loss_scale is "dynamic", adaptively adjust the loss scale over time')
     parser.add_argument('--master-weights', action='store_true',
         help='Maintain FP32 master weights to accompany any FP16 model weights, not applicable for O1 opt level')
-    parser.add_argument('--description', default='Implemented fast kdiga with gradient alignment', type=str)
+    parser.add_argument('--description', default='Implemented fast kdiga with gradient alignment. No grad align.', type=str)
     return parser.parse_args()
 
 
@@ -149,6 +149,7 @@ def main():
                 for j in range(len(epsilon)):
                     delta[:, j, :, :].uniform_(-epsilon[j][0][0].item(), epsilon[j][0][0].item())
                 delta.data = clamp(delta, lower_limit - X, upper_limit - X)
+            # FGSM
             delta = reset_delta(delta)
             output = model(X + delta[:bs])
             loss = F.cross_entropy(output, y)
@@ -157,45 +158,52 @@ def main():
             grad = delta.grad.detach()
             delta.data = clamp(delta + alpha * torch.sign(grad), -epsilon, epsilon)
             delta.data[:bs] = clamp(delta[:bs], lower_limit - X, upper_limit - X)
-            delta1 = reset_delta(delta)
-            output = model(X + delta1[:bs])
+            # Fast adv train
+            output = model(X + delta[:bs])
             ce_loss_adv = criterion(output, y)
             
             # KDIGA with correct teacher alignment
-            grad_s_adv = torch.autograd.grad(ce_loss_adv, delta1, create_graph=True)[0]
+            delta1 = reset_delta(delta)
+            output = model(X + delta1[:bs])
+            ce_loss_adv1 = criterion(output, y)
+            grad_s_adv = torch.autograd.grad(ce_loss_adv1, delta1, create_graph=True)[0]
             delta2 = reset_delta(delta)
             output_t_adv = teacher_net(X + delta2[:bs])
-            t_correct = (output_t_adv.detach().max(1)[1] == y).to(dtype=torch.float)
             loss_t_adv = criterion(output_t_adv, y)
             grad_t_adv = torch.autograd.grad(loss_t_adv, delta2)[0]
-            grad_t_adv = grad_t_adv.detach()
+            output_t_adv, grad_t_adv = output_t_adv.detach(), grad_t_adv.detach()
             # Align iff teacher predicts right
+            t_correct = (output_t_adv.max(1)[1] == y).to(dtype=torch.float)
             t_correct_ = t_correct[:, None].repeat(1, args.num_classes)
             kd_loss = args.temp * args.temp * F.kl_div(F.log_softmax(output / args.temp, dim=1) * t_correct_,
-                                                       F.softmax(output_t_adv.detach() / args.temp, dim=1) * t_correct_)
+                                                       F.softmax(output_t_adv / args.temp, dim=1) * t_correct_)
             t_correct_ = t_correct[:, None, None, None].repeat([1]+list(grad_t_adv.shape[1:]))
             grad_diff = torch.flatten((grad_s_adv - grad_t_adv)[:bs] * t_correct_, start_dim=1)
             iga_loss = torch.linalg.norm(grad_diff, ord=2, dim=1).mean()
+            
             # Grad Align regularizer
-            delta = torch.zeros_like(X, requires_grad=True)
-            output = model(X + delta)
-            loss = F.cross_entropy(output, y)
-            with amp.scale_loss(loss, opt) as scaled_loss:
-                grad1 = torch.autograd.grad(scaled_loss, delta, create_graph=True)[0]
-                grad1 /= scaled_loss / loss
-            grad2 = grad_s_adv.detach()
-            cos = cos_similarity(grad1, grad2)
-            reg = (1.0 - cos.mean())
+            # delta = torch.zeros_like(X, requires_grad=True)
+            # output = model(X + delta)
+            # loss = F.cross_entropy(output, y)
+            # with amp.scale_loss(loss, opt) as scaled_loss:
+            #     grad1 = torch.autograd.grad(scaled_loss, delta, create_graph=True)[0]
+            #     grad1 /= scaled_loss / loss
+            # grad2 = grad_s_adv.detach()
+            # cos = cos_similarity(grad1, grad2)
+            # reg = (1.0 - cos.mean())
+            reg = .0
+            
             loss = args.adv_lambda * ce_loss_adv + args.kd_lambda *  kd_loss + args.iga_lambda * iga_loss + args.grad_align_cos_lambda * reg
 
             opt.zero_grad()
-            with amp.scale_loss(ce_loss_adv, opt) as scaled_loss:
+            with amp.scale_loss(loss, opt) as scaled_loss:
                 scaled_loss.backward()
             opt.step()
-            train_loss += ce_loss_adv.item() * y.size(0)
+            train_loss += loss.item() * y.size(0)
             train_acc += (output.max(1)[1] == y).sum().item()
             train_n += y.size(0)
             scheduler.step()
+            # logger.info('%.4f \t %.4f \t %.4f \t %.4f \t %.4f '%(ce_loss_adv.item(), kd_loss.item(), iga_loss, reg, loss.item()))
         if args.early_stop:
             # Check current PGD robustness of model using random minibatch
             X, y = first_batch
