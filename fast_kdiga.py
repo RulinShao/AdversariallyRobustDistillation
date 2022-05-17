@@ -52,6 +52,7 @@ def get_args():
         help='Maintain FP32 master weights to accompany any FP16 model weights, not applicable for O1 opt level')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--num_classes', default=10, type=int)
+    parser.add_argument('--description', default=None, type=str)
     return parser.parse_args()
 
 

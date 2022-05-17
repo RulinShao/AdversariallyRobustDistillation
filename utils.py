@@ -28,6 +28,10 @@ def get_model(model_name, model_path):
         model = eval(model_name)().cuda()
         model.load_state_dict(torch.load(model_path))
         return  model
+    else:
+        from robustbench.utils import load_model as load_teacher_model
+        model = load_teacher_model(model_name='Rebuffi2021Fixing_70_16_cutmix_extra', dataset='cifar10', threat_model='Linf').cuda()
+        return model
 
 
 class NormalizeLayer(torch.nn.Module):
@@ -179,8 +183,8 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', type=str)
-    parser.add_argument('--model_path', type=str)
+    parser.add_argument('--model_name', default=None, type=str)
+    parser.add_argument('--model_path', default=None, type=str)
     parser.add_argument('--data_dir', default='~/rulin/dataset', type=str)
     parser.add_argument('--no_pp', action='store_true', help='no preprocessing')
     args = parser.parse_args()
@@ -192,7 +196,7 @@ if __name__ == '__main__':
     model_test.eval()
 
     test_loss = test_acc = pgd_loss = pgd_acc = aa_loss = aa_acc = - 1.0
-    aa_loss, aa_acc = evaluate_autoattack(model_test, n=2000, no_pp=args.no_pp, specify=['apgd-ce', 'fab'])
+    aa_loss, aa_acc = evaluate_autoattack(model_test, n=100, no_pp=args.no_pp, specify=['apgd-ce', 'fab'])
     pgd_loss, pgd_acc = evaluate_pgd(test_loader, model_test, 50, 10)
     test_loss, test_acc = evaluate_standard(test_loader, model_test)
     

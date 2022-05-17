@@ -28,11 +28,15 @@ logger = logging.getLogger(__name__)
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', default=128, type=int)
-    parser.add_argument('--out-dir', default='fast_kdiga_output/fast_kdiga_with_grad_align/', type=str, help='Output directory')
+    parser.add_argument('--out-dir', default='fast_kdiga_output/fast_kdiga_with_grad_align/debug/', type=str, help='Output directory')
     parser.add_argument('--data-dir', default='~/rulin/dataset', type=str)
+    parser.add_argument('--robustbench-teacher', default='Gowal2021Improving_28_10_ddpm_100m', type=str)
     parser.add_argument('--num_classes', default=10, type=int)
     parser.add_argument('--temp', default=1., type=float)
-    parser.add_argument('--gama', default=1, type=int)
+    parser.add_argument('--iga_lambda', default=1, type=int)
+    parser.add_argument('--kd_lambda', default=0.5, type=float)
+    parser.add_argument('--adv_lambda', default=0.5, type=float)
+    parser.add_argument('--grad_align_cos_lambda', default=0.2, type=float)
     parser.add_argument('--epochs', default=15, type=int)
     parser.add_argument('--lr-schedule', default='cyclic', choices=['cyclic', 'multistep'])
     parser.add_argument('--lr-min', default=0., type=float)
@@ -52,7 +56,6 @@ def get_args():
     parser.add_argument('--master-weights', action='store_true',
         help='Maintain FP32 master weights to accompany any FP16 model weights, not applicable for O1 opt level')
     parser.add_argument('--description', default='Implemented fast kdiga with gradient alignment', type=str)
-    parser.add_argument('--grad_align_cos_lambda', default=0.2, type=float)
     return parser.parse_args()
 
 
@@ -106,7 +109,7 @@ def main():
     model = PreActResNet18().cuda()
     model.train()
 
-    teacher_net = load_model(model_name='Rebuffi2021Fixing_70_16_cutmix_extra', dataset='cifar10', threat_model='Linf').cuda()
+    teacher_net = load_model(model_name=args.robustbench_teacher, dataset='cifar10', threat_model='Linf').cuda()
     teacher_net.eval()
 
     opt = torch.optim.SGD(model.parameters(), lr=args.lr_max, momentum=args.momentum, weight_decay=args.weight_decay)
@@ -182,8 +185,8 @@ def main():
                 grad1 /= scaled_loss / loss
             grad2 = grad_s_adv.detach()
             cos = cos_similarity(grad1, grad2)
-            reg = args.grad_align_cos_lambda * (1.0 - cos.mean())
-            loss = 0.5 * ce_loss_adv + 0.5 *  kd_loss + args.gama * iga_loss + reg
+            reg = (1.0 - cos.mean())
+            loss = args.adv_lambda * ce_loss_adv + args.kd_lambda *  kd_loss + args.iga_lambda * iga_loss + args.grad_align_cos_lambda * reg
 
             opt.zero_grad()
             with amp.scale_loss(ce_loss_adv, opt) as scaled_loss:
